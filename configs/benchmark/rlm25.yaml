@@ -1,0 +1,25 @@
+repositories:
+  - git_url: "https://github.com/teorth/pfr"
+    commit: "f6bdcac2365623d3667d3ff8fd8ddb7f95ce2313"
+    project_name: "PFR"
+    blueprint_cmd: null
+  - git_url: "https://github.com/pitmonticone/FLT3"
+    commit: "a199fa0467f86504a9d2f6164b0456608e586821"
+    project_name: "FLT3"
+    blueprint_cmd: null
+  - git_url: "https://github.com/fpvandoorn/carleson"
+    commit: "ec175b9008144d009269ce427b9ad43dbd70d0a5"
+    project_name: "Carleson"
+    blueprint_cmd: null
+  - git_url: "https://github.com/ImperialCollegeLondon/FLT"
+    commit: "fed5e57b05e232f3bfe24d24098111e9dcd7bcd1"
+    project_name: "FLT"
+    blueprint_cmd: null
+  - git_url: "https://github.com/RemyDegenne/testing-lower-bounds"
+    commit: "0f09ff100a06a5e4542181514bfff74213ae126b"
+    project_name: "TestingLowerBounds"
+    blueprint_cmd: null
+  - git_url: "https://github.com/AlexKontorovich/PrimeNumberTheoremAnd"
+    commit: "6101a4b1f0cd4096b0c41cc90c7ba89f7593ef77"
+    project_name: "PrimeNumberTheoremAnd"
+    blueprint_cmd: "python3 -m venv .venv && . .venv/bin/activate && pip3 install -r blueprint/requirements.txt && make blueprint"

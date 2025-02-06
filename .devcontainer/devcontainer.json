@@ -1,0 +1,23 @@
+{
+  "name": "RLM Dev Container",
+
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+
+  "postCreateCommand": "bash .devcontainer/postCreateCommand.sh",
+
+  "runArgs": [
+    "--gpus",
+    "all",
+    "--shm-size=20gb",
+    "--memory=55gb",
+    "--cpuset-cpus=0-20"
+  ],
+
+  "containerEnv": {
+    "OPENAI_API_KEY": "${localEnv:OPENAI_API_KEY}",
+    "HF_TOKEN": "${localEnv:HF_TOKEN}",
+    "GITHUB_ACCESS_TOKEN": "${localEnv:GITHUB_ACCESS_TOKEN}"
+  }
+}

@@ -1,0 +1,13 @@
+model: "gpt-4o-2024-05-13"
+temperature: 0.0
+max_total_tokens: 4096
+max_generated_tokens: 512
+use_chat_prompt: true
+stopwords:
+  - "```\n"
+  - ":= by"
+  - "sorry"
+n_processes: 15
+prompt_context: "FILE_CONTEXT"
+api_key: null
+api_base_url: null

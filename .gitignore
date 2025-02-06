@@ -1,0 +1,16 @@
+# Python related
+*.egg-info
+__pycache__
+.venv
+
+# Lean related
+*.lake
+
+# Ignore traced repositories
+traced_repos
+
+# Cache
+.cache
+
+# Results
+results
