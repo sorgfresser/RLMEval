@@ -39,9 +39,13 @@ Run the evaluation:
 [Improving Autoformalization using Type Checking](https://arxiv.org/abs/2406.07222)
 
 ```bibtex
-@misc{poiroux_improving_2024,
-	title = {Improving {Autoformalization} using {Type} {Checking}},
-	author = {Poiroux, Auguste and Weiss, Gail and Kunčak, Viktor and Bosselut, Antoine},
-	year = {2024},
+@misc{poiroux2024improvingautoformalizationusingtype,
+    title={Improving Autoformalization using Type Checking}, 
+    author={Auguste Poiroux and Gail Weiss and Viktor Kunčak and Antoine Bosselut},
+    year={2024},
+    eprint={2406.07222},
+    archivePrefix={arXiv},
+    primaryClass={cs.CL},
+    url={https://arxiv.org/abs/2406.07222}, 
 }
 ```
