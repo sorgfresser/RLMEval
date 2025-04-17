@@ -32,7 +32,7 @@ Prepare the RLM25 dataset:
 
 Run the evaluation:
 
-    python scripts/eval_statement_autoformalization --benchmark-config configs/benchmark/rlm25.yaml --model-config configs/models/gpt-4o_greedy.yaml
+    python scripts/eval_statement_autoformalization.py --benchmark-config configs/benchmark/rlm25.yaml --model-config configs/models/gpt-4o_greedy.yaml
 
 ## Citation
 

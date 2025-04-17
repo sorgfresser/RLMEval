@@ -16,6 +16,7 @@ from lean_dojo.data_extraction.traced_data import (
     is_mutual_lean4,
     is_potential_premise_lean4,
 )
+
 from rlm_eval.utils import logger
 
 
@@ -83,6 +84,8 @@ def get_declaration_dependencies(traced_file: TracedFile) -> list[dict]:
                 return deduplicated
 
             is_theorem = False
+            proof_node = None
+            thm_node = None
             if isinstance(node, LemmaNode):
                 is_theorem = True
                 thm_node = node.children[1]
@@ -100,6 +103,7 @@ def get_declaration_dependencies(traced_file: TracedFile) -> list[dict]:
             )
 
             if is_theorem:
+                assert thm_node is not None and proof_node is not None
                 # theorem-specific information
                 proof_start, _ = proof_node.get_closure()
                 assert proof_start is not None

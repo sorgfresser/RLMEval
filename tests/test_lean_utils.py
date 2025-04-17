@@ -1,16 +1,19 @@
 import unittest
 
-from src.rlm_eval.data_processing.lean_utils import (
-    LeanFilesProcessor,
+from lean_interact.utils import (
     clean_last_theorem_string,
     clean_theorem_string,
     extract_last_theorem,
     indent_code,
-    lean_comments_ranges,
     remove_lean_comments,
-    replace_ranges,
     split_conclusion,
     split_implementation,
+)
+
+from src.rlm_eval.data_processing.lean_utils import (
+    LeanFilesProcessor,
+    lean_comments_ranges,
+    replace_ranges,
     trim_comments_end,
 )
 

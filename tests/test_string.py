@@ -1,6 +1,6 @@
 import unittest
 
-from rlm_eval.tools.string import compress_newlines
+from lean_interact.utils import compress_newlines
 
 
 class TestCompressNewlines(unittest.TestCase):

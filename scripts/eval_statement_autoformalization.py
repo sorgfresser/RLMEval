@@ -12,7 +12,9 @@ import jsonlines
 import litellm
 import networkx as nx
 import yaml
-from lean_interact import AutoLeanServer, LeanREPLConfig
+from lean_interact import AutoLeanServer, LeanREPLConfig, LocalProject
+from lean_interact.interface import Command, LeanError
+from lean_interact.utils import clean_theorem_string
 from litellm import completion, text_completion
 from litellm.caching.caching import Cache, LiteLLMCacheType
 from litellm.exceptions import ContextWindowExceededError
@@ -22,16 +24,8 @@ from rich.syntax import Syntax
 from rich.table import Table
 from tqdm import tqdm
 
-from rlm_eval.data_processing.lean_utils import (
-    LeanFilesProcessor,
-    clean_theorem_string,
-    trim_comments_end,
-)
-from rlm_eval.metrics.beq_plus import (
-    BEqCPUResult,
-    check_theorem_equivalence,
-)
-from rlm_eval.tools.repl_output_processing import is_valid_lean
+from rlm_eval.data_processing.lean_utils import LeanFilesProcessor, trim_comments_end
+from rlm_eval.metrics.beq_plus import BEqCPUResult, check_theorem_equivalence
 from rlm_eval.utils import (
     DATA_DIR,
     ROOT_DIR,
@@ -67,7 +61,7 @@ class StatementAutoformalizationEvaluation:
         self.project_dir = project_dir
 
         # preloading the Lean server to make sure it is cached before using multiprocessing
-        self.repl_config = LeanREPLConfig(project_dir=project_dir)
+        self.repl_config = LeanREPLConfig(project=LocalProject(project_dir))
 
     def run(
         self,
@@ -498,7 +492,7 @@ def _formalize_node(
         if use_chat_prompt:
             match prompt_context:
                 case PromptContext.PROOFNET_FEW_SHOT:
-                    with jsonlines.open(os.path.join(DATA_DIR, "12_shot_proofnet_lean4.jsonl")) as f:
+                    with jsonlines.open(os.path.join(DATA_DIR, "8_shot_proofnet_lean4.jsonl")) as f:
                         proofnet_few_shot = list(f)
                     template_few_shot = "Natural language version:\n{nl_statement}\nTranslate the natural language version to a Lean 4 version:"
                     messages = []
@@ -600,7 +594,7 @@ def _formalize_node(
         else:
             match prompt_context:
                 case PromptContext.PROOFNET_FEW_SHOT:
-                    with jsonlines.open(os.path.join(DATA_DIR, "12_shot_proofnet_lean4.jsonl")) as f:
+                    with jsonlines.open(os.path.join(DATA_DIR, "8_shot_proofnet_lean4.jsonl")) as f:
                         proofnet_few_shot = list(f)
                     template_few_shot = "Natural language version:\n{nl_statement}\nTranslate the natural language version to a Lean 4 version:"
                     prompt = "\n\n".join(
@@ -740,27 +734,35 @@ def _process_predictions(args: ProcessPredictionsInput) -> tuple[str, str, list[
 
     # Prepare the Lean context
     original_lean_context = args.original_file_content[: args.lean_declaration["start_idx"]]
+
     # check if the last line ends with " in" and remove " in" if it does
-    lean_context, last_line = trim_comments_end(original_lean_context).rstrip().rsplit("\n", 1)
+    trimmed_context = trim_comments_end(original_lean_context).rstrip()
+    if "\n" in trimmed_context:
+        lean_context, last_line = trimmed_context.rsplit("\n", 1)
+    else:
+        lean_context = ""
+        last_line = trimmed_context
     if last_line.endswith(" in"):
         lean_context += "\n" + last_line[:-3]
     else:
         lean_context = original_lean_context
 
+    # Ensure lean_context is not empty (Command requires at least 1 character)
+    if not lean_context.strip():
+        lean_context = "-- context stub"
+
     # Load the Lean context
     try:
-        lean_context_output = lean_server.run_code(
-            lean_context, add_to_session_cache=True, timeout=args.timeout_context
+        lean_context_output = lean_server.run(
+            Command(cmd=lean_context), add_to_session_cache=True, timeout=args.timeout_context
         )
-        context_env = lean_context_output["env"]
         # check if the context is valid
-        if not is_valid_lean(lean_context_output):
+        if isinstance(lean_context_output, LeanError) or not lean_context_output.lean_code_is_valid():
             print_lean_context = lean_context
             if len(lean_context) > 1000:
                 print_lean_context = lean_context[:500] + "\n\n... [TRUNCATED] ...\n\n" + lean_context[-500:]
-            raise Exception(
-                "Invalid Lean context:\n" + str(lean_context_output["messages"]) + "\n" + print_lean_context
-            )
+            raise Exception("Invalid Lean context:\n" + str(lean_context_output) + "\n" + print_lean_context)
+        context_env = lean_context_output.env
     except (TimeoutError, EOFError, json.JSONDecodeError) as e:
         print_lean_context = lean_context
         if len(lean_context) > 1000:
@@ -792,9 +794,11 @@ def _process_predictions(args: ProcessPredictionsInput) -> tuple[str, str, list[
         lean_file.write(lean_context + "\n" + decl_ground_truth)
 
     # check that the ground truth is well-typed. It should be, otherwise it means we have a problem with the context
-    ground_truth_output = lean_server.run_code(decl_ground_truth, env=context_env, timeout=args.timeout_per_prediction)
-    if not is_valid_lean(ground_truth_output):
-        raise Exception(f"Invalid ground truth Lean code:\n{str(ground_truth_output['messages'])}\n{decl_ground_truth}")
+    ground_truth_output = lean_server.run(
+        Command(cmd=decl_ground_truth, env=context_env), timeout=args.timeout_per_prediction
+    )
+    if isinstance(ground_truth_output, LeanError) or not ground_truth_output.lean_code_is_valid():
+        raise Exception(f"Invalid ground truth Lean code:\n{str(ground_truth_output)}\n{decl_ground_truth}")
 
     tmp_res: list[PredictionEvaluationResult] = []
     for i, lean_code in enumerate(dedup_predictions):
@@ -804,12 +808,14 @@ def _process_predictions(args: ProcessPredictionsInput) -> tuple[str, str, list[
             continue
 
         try:
-            lean_output = lean_server.run_code(lean_code, env=context_env, timeout=args.timeout_per_prediction)
-            tmp_res[-1].well_typed = is_valid_lean(lean_output, allow_sorry=is_thm)
+            lean_output = lean_server.run(Command(cmd=lean_code, env=context_env), timeout=args.timeout_per_prediction)
+            if isinstance(lean_output, LeanError):
+                continue
+            tmp_res[-1].well_typed = lean_output.lean_code_is_valid(allow_sorry=is_thm)
 
             # dump the Lean server output
             with open(os.path.join(args.output_folder, f"type_check_output_{i}.json"), "w") as lean_output_file:
-                lean_output_file.write(json.dumps(lean_output, indent=4, ensure_ascii=False))
+                lean_output_file.write(json.dumps(lean_output.model_dump(mode="json"), indent=4, ensure_ascii=False))
 
             if tmp_res[-1].well_typed and is_thm:
                 tmp_res[-1].beq_result = check_theorem_equivalence(

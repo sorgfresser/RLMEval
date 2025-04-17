@@ -1,0 +1,9 @@
+repositories:
+  - git_url: "https://github.com/pitmonticone/FLT3"
+    commit: "a199fa0467f86504a9d2f6164b0456608e586821"
+    project_name: "FLT3"
+    blueprint_cmd: null
+  - git_url: "https://github.com/AlexKontorovich/PrimeNumberTheoremAnd"
+    commit: "6101a4b1f0cd4096b0c41cc90c7ba89f7593ef77"
+    project_name: "PrimeNumberTheoremAnd"
+    blueprint_cmd: "python3 -m venv .venv && . .venv/bin/activate && pip3 install -r blueprint/requirements.txt && make blueprint"

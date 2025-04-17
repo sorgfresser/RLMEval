@@ -1,13 +1,18 @@
 import json
 from dataclasses import dataclass
 
-from lean_interact import AutoLeanServer
-from rlm_eval.data_processing.lean_utils import (
+from lean_interact import AutoLeanServer, Command
+from lean_interact.interface import (
+    CommandResponse,
+    LeanError,
+    Pos,
+    message_intersects_code,
+)
+from lean_interact.utils import (
     clean_last_theorem_string,
     indent_code,
     split_conclusion,
 )
-from rlm_eval.tools.repl_output_processing import is_valid_lean
 
 
 @dataclass
@@ -26,6 +31,18 @@ def update_tuple(t: tuple, idx: int, value) -> tuple:
     t_list = list(t)
     t_list[idx] = value
     return tuple(t_list)
+
+
+def extract_exact_proof(lean_output: CommandResponse, proof_start_line: int | None = None) -> str | None:
+    # check only the messages intersecting the proof
+    start = Pos(line=proof_start_line, column=0) if proof_start_line else None
+    for message in lean_output.messages:
+        if message_intersects_code(message, start, None):
+            if message.severity == "error":
+                return None
+            if message.severity == "info" and message.data.startswith("Try this:"):
+                return message.data.split("Try this:")[1].strip()
+    return None
 
 
 def check_theorem_equivalence(
@@ -57,25 +74,26 @@ def check_theorem_equivalence(
         def check_proof_sub(proof: str, formal_code: str = formal_1_code + formal_2_code) -> str | None:
             prepended_proof = "\nintros\nsymm_saturate\n"
             try:
-                lean_output = lean_server.run_code(
-                    formal_code + indent_code(prepended_proof + proof, 2),
-                    env=context_env,
+                lean_output = lean_server.run(
+                    Command(cmd=formal_code + indent_code(prepended_proof + proof, 2), env=context_env),
                     timeout=timeout_per_proof,
                 )
 
+                if isinstance(lean_output, LeanError):
+                    return None
+
                 if proof == "sorry":
                     # sorry is used on purpose to check if the formalization is well-typed
-                    if is_valid_lean(lean_output, start_line=formal_2_start_line):
+                    if lean_output.lean_code_is_valid(start_pos=Pos(line=formal_2_start_line, column=0)):
                         return proof
                     return None
 
-                if is_valid_lean(lean_output, start_line=formal_2_start_line, allow_sorry=False):
+                if lean_output.lean_code_is_valid(start_pos=Pos(line=formal_2_start_line, column=0), allow_sorry=False):
                     if proof == "exact?":
-                        return _extract_proof(lean_output, proof_start_line=formal_2_start_line)
+                        return extract_exact_proof(lean_output, proof_start_line=formal_2_start_line)
                     return proof
-            except (TimeoutError, EOFError, json.JSONDecodeError):
-                lean_server.restart()
-
+            except (TimeoutError, ConnectionAbortedError, json.JSONDecodeError):
+                pass
             return None
 
         # to avoid losing time, we first check if the formalizations are well-typed
@@ -84,11 +102,10 @@ def check_theorem_equivalence(
 
         # 1. Use `exact?` tactic. We check if it is using the base theorem in the proof.
         proof_exact = check_proof_sub("exact?")
-        if proof_exact:
-            if base_thm_name in proof_exact:
-                res.beql_unidirections = update_tuple(res.beql_unidirections, i, proof_exact)
-                res.beq_plus_unidirections = update_tuple(res.beq_plus_unidirections, i, proof_exact)
-                continue
+        if proof_exact and base_thm_name in proof_exact:
+            res.beql_unidirections = update_tuple(res.beql_unidirections, i, proof_exact)
+            res.beq_plus_unidirections = update_tuple(res.beq_plus_unidirections, i, proof_exact)
+            continue
 
         # 2. try to apply the base theorem directly
         proof_apply = check_proof_sub(f"apply {base_thm_name}\n" + proof_all_apply)
@@ -102,12 +119,13 @@ def check_theorem_equivalence(
         # drawback of `have` strategy: variable names/types must match exactly
         provable_without_have = False
         try:
-            provable_without_have = is_valid_lean(
-                lean_server.run_code(formal_2_code + proof_all_have, env=context_env, timeout=timeout_per_proof),
-                allow_sorry=False,
+            res_without_have = lean_server.run(
+                Command(cmd=formal_2_code + proof_all_have, env=context_env), timeout=timeout_per_proof
             )
-        except (TimeoutError, EOFError, json.JSONDecodeError):
-            lean_server.restart()
+            if isinstance(res_without_have, CommandResponse):
+                provable_without_have = res_without_have.lean_code_is_valid(allow_sorry=False)
+        except (TimeoutError, ConnectionAbortedError, json.JSONDecodeError):
+            pass
 
         if not provable_without_have:
             idx_conclusion = split_conclusion(formal_1_code)
@@ -134,24 +152,3 @@ def check_theorem_equivalence(
                 break
 
     return res
-
-
-def _extract_proof(
-    lean_output: dict, proof_start_line: int | None = None, proof_end_line: int | None = None, verbose: bool = False
-) -> str | None:
-    def message_intersects_proof(message, start_line, end_line):
-        res = True
-        if start_line is not None:
-            res = res and message["endPos"]["line"] >= start_line
-        if end_line is not None:
-            res = res and message["startPos"]["line"] <= end_line
-        return res
-
-    # check only the messages intersecting the proof
-    for message in lean_output.get("messages", []):
-        if message_intersects_proof(message, proof_start_line, proof_end_line):
-            if message["severity"] == "error":
-                return None
-            if message["severity"] == "info" and message["data"].startswith("Try this:"):
-                return message["data"].split("Try this:")[1].strip()
-    return None
