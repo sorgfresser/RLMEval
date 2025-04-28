@@ -69,7 +69,7 @@ def check_theorem_equivalence(
             formal_2_code = f"{clean_last_theorem_string(reform_thm, reformulated_thm_name, add_sorry=False)} := by"
         except ValueError:
             # we cannot change one of the theorems name, probably because it is invalid, so we skip this pair
-            continue
+            break
 
         def check_proof_sub(proof: str, formal_code: str = formal_1_code + formal_2_code) -> str | None:
             prepended_proof = "\nintros\nsymm_saturate\n"
@@ -98,7 +98,7 @@ def check_theorem_equivalence(
 
         # to avoid losing time, we first check if the formalizations are well-typed
         if check_proof_sub("sorry") is None:
-            continue
+            break
 
         # 1. Use `exact?` tactic. We check if it is using the base theorem in the proof.
         proof_exact = check_proof_sub("exact?")
@@ -150,5 +150,8 @@ def check_theorem_equivalence(
             if proof_convert:
                 res.beq_plus_unidirections = update_tuple(res.beq_plus_unidirections, i, proof_convert)
                 break
+
+        if not res.beq_plus_unidirections[i]:
+            break
 
     return res
