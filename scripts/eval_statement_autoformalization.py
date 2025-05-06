@@ -45,6 +45,7 @@ class PromptContext(Enum):
     PROOFNET_FEW_SHOT = "proofnet_few_shot"
     FILE_CONTEXT = "file_context"
     ZERO_SHOT_FINETUNED = "none"
+    ZERO_SHOT_KIMINA = "kimina"
 
 
 class StatementAutoformalizationEvaluation:
@@ -557,6 +558,16 @@ def _formalize_node(
                                 "role": "user",
                                 "content": f"Natural language version:\n{_node_informal_text(node)}\nTranslate the natural language version to a Lean 4 version:",
                             }
+                        ]
+                    )
+                case PromptContext.ZERO_SHOT_KIMINA:
+                    compress_level = 0
+                    prompt = "Please autoformalize the following problem in Lean 4 with a header. Use the following theorem names: my_favorite_theorem.\n\n"
+                    prompt += f"\n{_node_informal_text(node)}"
+                    messages = clean_messages(
+                        [
+                            {"role": "system", "content": "You are an expert in mathematics and Lean 4."},
+                            {"role": "user", "content": prompt}
                         ]
                     )
 
