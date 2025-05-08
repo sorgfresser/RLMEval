@@ -15,7 +15,7 @@ import yaml
 from lean_interact import AutoLeanServer, LeanREPLConfig, LocalProject
 from lean_interact.interface import Command, LeanError
 from lean_interact.utils import clean_theorem_string
-from litellm import completion, text_completion
+from litellm import completion
 from litellm.caching.caching import Cache, LiteLLMCacheType
 from litellm.exceptions import ContextWindowExceededError
 from litellm.utils import token_counter
@@ -658,7 +658,7 @@ def _formalize_node(
                 context_file.write(prompt)
 
             try:
-                completion_response = text_completion(
+                completion_response = completion(
                     model=model,
                     prompt=prompt,
                     max_tokens=max_generated_tokens,
@@ -675,7 +675,7 @@ def _formalize_node(
                 return [None for _ in range(nb_attempts)], 0, 0
 
             predictions = [
-                prefix_decl + " " + choice.text if choice.text and choice.text.strip() else None  # type: ignore
+                prefix_decl + " " + choice.message.content if choice.message.content and choice.message.content.strip() else None  # type: ignore
                 for choice in completion_response.choices  # type: ignore
             ]
 
