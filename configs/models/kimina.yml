@@ -12,4 +12,4 @@ stopwords:
 n_processes: 15
 prompt_context: "ZERO_SHOT_KIMINA"
 api_key: abc-123
-api_base_url: http://localhost:8000
+api_base_url: http://localhost:8000/v1
