@@ -166,6 +166,7 @@ class StatementAutoformalizationEvaluation:
                 )
                 return node, predictions, input_tokens, output_tokens, None
             except Exception as e:
+                logger.exception("Formalization error!")
                 return node, None, 0, 0, str(e)
 
         # Run sequential processing
