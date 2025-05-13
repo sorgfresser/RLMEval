@@ -798,10 +798,10 @@ def _process_predictions(args: ProcessPredictionsInput) -> tuple[str, str, list[
         prediction_file.write_all({"prediction": prediction} for prediction in dedup_predictions)
 
     # dump the Lean codes with the context to a file
-    for i, lean_code in enumerate(dedup_predictions):
-        if lean_code:
-            with open(os.path.join(args.output_folder, f"attempt_{i}.lean"), "w") as lean_file:
-                lean_file.write(lean_context + "\n" + lean_code)
+    # for i, lean_code in enumerate(dedup_predictions):
+    #     if lean_code:
+    #         with open(os.path.join(args.output_folder, f"attempt_{i}.lean"), "w") as lean_file:
+    #             lean_file.write(lean_context + "\n" + lean_code)
     with open(os.path.join(args.output_folder, "ground_truth.lean"), "w") as lean_file:
         lean_file.write(lean_context + "\n" + decl_ground_truth)
 
@@ -826,8 +826,8 @@ def _process_predictions(args: ProcessPredictionsInput) -> tuple[str, str, list[
             tmp_res[-1].well_typed = lean_output.lean_code_is_valid(allow_sorry=is_thm)
 
             # dump the Lean server output
-            with open(os.path.join(args.output_folder, f"type_check_output_{i}.json"), "w") as lean_output_file:
-                lean_output_file.write(json.dumps(lean_output.model_dump(mode="json"), indent=4, ensure_ascii=False))
+            # with open(os.path.join(args.output_folder, f"type_check_output_{i}.json"), "w") as lean_output_file:
+            #     lean_output_file.write(json.dumps(lean_output.model_dump(mode="json"), indent=4, ensure_ascii=False))
 
             if tmp_res[-1].well_typed and is_thm:
                 tmp_res[-1].beq_result = check_theorem_equivalence(
