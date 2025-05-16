@@ -9,7 +9,7 @@ repositories:
     blueprint_cmd: null
   - git_url: "https://github.com/fpvandoorn/carleson"
     commit: "ec175b9008144d009269ce427b9ad43dbd70d0a5"
-    project_name: "Carleson"
+    project_name: "carleson"
     blueprint_cmd: null
   - git_url: "https://github.com/ImperialCollegeLondon/FLT"
     commit: "fed5e57b05e232f3bfe24d24098111e9dcd7bcd1"
@@ -17,7 +17,7 @@ repositories:
     blueprint_cmd: null
   - git_url: "https://github.com/RemyDegenne/testing-lower-bounds"
     commit: "0f09ff100a06a5e4542181514bfff74213ae126b"
-    project_name: "TestingLowerBounds"
+    project_name: "testing-lower-bounds"
     blueprint_cmd: null
   - git_url: "https://github.com/AlexKontorovich/PrimeNumberTheoremAnd"
     commit: "6101a4b1f0cd4096b0c41cc90c7ba89f7593ef77"

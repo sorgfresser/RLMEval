@@ -46,7 +46,7 @@ class PromptContext(Enum):
     FILE_CONTEXT = "file_context"
     ZERO_SHOT_FINETUNED = "none"
     ZERO_SHOT_KIMINA = "kimina"
-
+data = []
 
 class StatementAutoformalizationEvaluation:
     def __init__(
@@ -189,7 +189,7 @@ class StatementAutoformalizationEvaluation:
         if verbose:
             console.print(f"Total input tokens: {total_input_tokens}")
             console.print(f"Total output tokens: {total_output_tokens}")
-
+        return total_input_tokens, total_output_tokens
         self._check_predictions(
             blueprint_graph=blueprint_graph,
             predictions_to_check=predictions_to_check,
@@ -464,6 +464,16 @@ def _formalize_node(
     lean_declaration = node["lean_declarations"][0]
     original_file_content: str = lean_files[lean_declaration["file"]]
     original_lean_context = original_file_content[: lean_declaration["start_idx"]]
+    decl_ground_truth = lean_declaration["decl_no_comments"]
+    is_thm = is_theorem(node)
+    if is_thm:
+        decl_ground_truth = clean_theorem_string(
+            lean_declaration["theorem_info"]["declsig_no_comments"],
+            new_theorem_name=lean_declaration["name"],
+            add_sorry=True,
+        )
+    data.append((node["processed_text"], original_lean_context, decl_ground_truth, lean_declaration["name"]))
+    return [], 0, 0
 
     def compress_lean_context(lean_context: str, level: int = 0) -> str:
         if level == -1:
@@ -935,3 +945,8 @@ if __name__ == "__main__":
             n_processes=n_processes,
             prompt_context=prompt_context,
         )
+    from datasets import Dataset
+    data = [{"name": x[3], "ground_truth": x[2], "context": x[1], "informal": x[0]} for x in data]
+    ds = Dataset.from_list(data)
+    ds.save_to_disk("./rlm25")
+    ds.push_to_hub("autoformtest", private=True)
