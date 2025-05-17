@@ -183,11 +183,12 @@ async def load_context(project: str, req: ContextRequest):
     pool = _POOLS.get(project)
     if pool is None:
         raise HTTPException(404, f"Unknown project {project!r}")
+    if not req.context:
+        raise HTTPException(400, "No context provided")
 
     sid, wrapper = await pool.acquire_server(req.server_id)
 
-    async with wrapper.lock:  # one-at-a-time guarantee
-        env_id = await pool.get_or_create_env(req.context, wrapper)
+    env_id = await pool.get_or_create_env(req.context, wrapper)
 
     return ContextResponse(server_id=sid, env_id=env_id)
 
