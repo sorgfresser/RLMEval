@@ -39,7 +39,7 @@ REPOS: dict[str, Path] = {
 
 
 def _build_config(repo_root: Path) -> LeanREPLConfig:
-    return LeanREPLConfig(project=LocalProject(str(repo_root)),memory_hard_limit_mb=None)
+    return LeanREPLConfig(project=LocalProject(str(repo_root), build=False),memory_hard_limit_mb=None)
 
 
 class LoadedContext:
