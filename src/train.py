@@ -2,13 +2,19 @@ from datasets import load_dataset
 from trl import GRPOTrainer, GRPOConfig
 from rlm_eval.metrics.beq_plus import check_theorem_eq_server
 from rlm_eval.data_processing.lean_utils import trim_comments_end
-import json
 import argparse
 import requests
 from lean_pool_models import ContextRequest, ContextResponse, RunResponse, RunRequest
 from lean_interact import Command
 from lean_interact.interface import CommandResponse, LeanError
 from pydantic import ValidationError
+import concurrent.futures
+import logging
+import os
+
+logger = logging.getLogger(__name__)
+
+MAX_WORKERS = int(os.getenv("LEAN_POOL_MAX_WORKERS", 4))
 
 
 def get_beqplus(context: str, ground_truth: str, prediction: str, project: str, is_theorem: bool) -> float:
@@ -105,8 +111,17 @@ def main():
         rewards = [r if c and c[0]["role"] == "assistant" else 0.0 for r, c in zip(rewards, completions, strict=True)]
         completion_strings = [None if r is not None else c[0]["content"] for r, c in
                               zip(rewards, completions, strict=True)]
-        return [get_beqplus(con, g, c, p, t) for con, g, c, p, t in
-                zip(context, ground_truth, completion_strings, project, is_theorem, strict=True)]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+            futures = {pool.submit(get_beqplus, con, g, c, p, t): idx for idx, (con, g, c, p, t) in
+                       enumerate(zip(context, ground_truth, completion_strings, project, is_theorem, strict=True))}
+            for fut in concurrent.futures.as_completed(futures):
+                idx = futures[fut]
+                try:
+                    rewards[idx] = fut.result()
+                except Exception:
+                    logger.exception("Reward thread %s failed", idx)
+                    rewards[idx] = 0.0
+        return rewards
 
     training_args = GRPOConfig(
         output_dir="Kimina-GRPO",
