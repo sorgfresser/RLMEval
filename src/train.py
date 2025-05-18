@@ -41,7 +41,11 @@ def get_beqplus(context: str, ground_truth: str, prediction: str, project: str, 
     resp = requests.post(f"http://localhost:8080/{project}/run", data=req.model_dump_json())
     ground_truth_response = RunResponse.model_validate(resp.json())
     # Check ground truth is valid
-    CommandResponse.model_validate(ground_truth_response.result)
+    try:
+        CommandResponse.model_validate(ground_truth_response.result)
+    except ValidationError:
+        logger.exception("Failed to validate ground-truth!")
+        raise
 
     if not prediction:
         well_typed, beq_result = False, None

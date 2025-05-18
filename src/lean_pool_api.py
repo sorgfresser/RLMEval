@@ -68,10 +68,10 @@ class _ServerWrapper:
         and context_locks ensures that only one server wrapper reads a context at the same time.
         """
         key = hashlib.sha256(context.encode()).hexdigest()
-        if key in self.loaded_contexts:
-            return self.loaded_contexts[key]
-        # Load context
         async with self.lock:
+            if key in self.loaded_contexts:
+                return self.loaded_contexts[key]
+            # Load context
             await context_lock.acquire()
             # Never before, create from scratch
             if key not in context_paths:
@@ -91,14 +91,17 @@ class _ServerWrapper:
                         raise HTTPException(status_code=400,
                                             detail=f"Command for context failed with {context_response.message}")
                     assert not isinstance(context_response, LeanError)
+                    if not context_response.lean_code_is_valid(allow_sorry=True):
+                        logger.warning("Context Command has errors! Response: %s", context_response)
+                        raise HTTPException(status_code=400, detail=f"Command for context failed with errors: {context_response.get_errors()}")
                     self.loaded_contexts[key] = LoadedContext(pickle_path=pickle_path, env_id=context_response.env)
                     # Pickle the specific context, then release
                     request = PickleEnvironment(env=context_response.env, pickle_to=str(pickle_path))
                     response = await self.server.async_run(request)
+                    context_locks[key].release()
                     if isinstance(response, LeanError):
                         logger.warning("PickleEnvironment failed with %s.\nRequest: %s.\nContext response: %s", response.message, request, context_response)
                         raise HTTPException(status_code=500, detail=f"PickleEnvironment failed with {response.message}")
-                    context_locks[key].release()
                 else:
                     context_locks[key].release()
                     response = await self.server.async_run(
