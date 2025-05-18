@@ -113,7 +113,7 @@ class _ServerWrapper:
                 await context_locks[key].acquire() # this is only needed to wait if we're still pickling
                 context_locks[key].release()
                 response = await self.server.async_run(
-                    UnpickleEnvironment(unpickle_env_from=str(context_paths[key])), verbose=True)
+                    UnpickleEnvironment(unpickle_env_from=str(context_paths[key])), verbose=False)
                 assert not isinstance(response, LeanError)
                 assert response.lean_code_is_valid(allow_sorry=True)
                 self.loaded_contexts[key] = LoadedContext(pickle_path=context_paths[key], env_id=response.env)
