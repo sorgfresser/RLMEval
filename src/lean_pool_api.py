@@ -39,10 +39,7 @@ REPOS: dict[str, Path] = {
 
 
 def _build_config(repo_root: Path) -> LeanREPLConfig:
-    return LeanREPLConfig(
-        project=LocalProject(str(repo_root)),
-        memory_hard_limit_mb=25_000,
-    )
+    return LeanREPLConfig(project=LocalProject(str(repo_root)),memory_hard_limit_mb=None)
 
 
 class LoadedContext:
@@ -113,10 +110,12 @@ class _ServerWrapper:
                     self.loaded_contexts[key] = LoadedContext(pickle_path=context_paths[key], env_id=response.env)
             else:
                 context_lock.release()
-                async with context_locks[key]:
-                    response = await self.server.async_run(
-                        UnpickleEnvironment(unpickle_env_from=str(context_paths[key])))
+                await context_locks[key].acquire() # this is only needed to wait if we're still pickling
+                context_locks[key].release()
+                response = await self.server.async_run(
+                    UnpickleEnvironment(unpickle_env_from=str(context_paths[key])), verbose=True)
                 assert not isinstance(response, LeanError)
+                assert response.lean_code_is_valid(allow_sorry=True)
                 self.loaded_contexts[key] = LoadedContext(pickle_path=context_paths[key], env_id=response.env)
         return self.loaded_contexts[key]
 
@@ -202,7 +201,7 @@ async def run(project: str, req: RunRequest):
     sid, wrapper = await pool.acquire_server(req.server_id)
 
     async with wrapper.lock:
-        result = await wrapper.server.async_run(req.data, timeout=300, )
+        result = await wrapper.server.async_run(req.data, timeout=300, verbose=False)
         # Ensure JSON-serialisable
         if hasattr(result, "model_dump"):
             result = result.model_dump(by_alias=True)
