@@ -11,23 +11,19 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-from filelock import FileLock
 
 from lean_interact import AutoLeanServer, LeanREPLConfig, LocalProject
 from lean_interact.interface import (
     Command,
-    FileCommand,
     PickleEnvironment,
     UnpickleEnvironment,
-    ProofStep,
-    PickleProofState,
-    UnpickleProofState,
-    BaseREPLQuery,
-    CommandResponse,
-    ProofStepResponse,
     LeanError,
 )
+import logging
+
+from lean_pool_models import RunResponse, RunRequest, ContextRequest, ContextResponse
+
+logger = logging.getLogger(__name__)
 
 REPOS: dict[str, Path] = {
     "PFR": Path('/home/tss52/PycharmProjects/RLMEval/traced_repos/pfr_f6bdcac2365623d3667d3ff8fd8ddb7f95ce2313/pfr'),
@@ -37,7 +33,7 @@ REPOS: dict[str, Path] = {
     "FLT": Path('/home/tss52/PycharmProjects/RLMEval/traced_repos/FLT_fed5e57b05e232f3bfe24d24098111e9dcd7bcd1/FLT'),
     "TestingLowerBounds": Path(
         '/home/tss52/PycharmProjects/RLMEval/traced_repos/testing-lower-bounds_0f09ff100a06a5e4542181514bfff74213ae126b/testing-lower-bounds'),
-    "PromeNumberTheoremAnd": Path(
+    "PrimeNumberTheoremAnd": Path(
         '/home/tss52/PycharmProjects/RLMEval/traced_repos/PrimeNumberTheoremAnd_6101a4b1f0cd4096b0c41cc90c7ba89f7593ef77/PrimeNumberTheoremAnd'),
 }
 
@@ -47,27 +43,6 @@ def _build_config(repo_root: Path) -> LeanREPLConfig:
         project=LocalProject(str(repo_root)),
         memory_hard_limit_mb=25_000,
     )
-
-
-class RunRequest(BaseModel):
-    data: Command | FileCommand | PickleEnvironment | UnpickleEnvironment \
-          | ProofStep | PickleProofState | UnpickleProofState | BaseREPLQuery
-    server_id: Optional[int] = None
-
-
-class ContextRequest(BaseModel):
-    context: str
-    server_id: Optional[int] = None
-
-
-class ContextResponse(BaseModel):
-    server_id: int
-    env_id: int
-
-
-class RunResponse(BaseModel):
-    server_id: int
-    result: dict
 
 
 class LoadedContext:
@@ -108,13 +83,28 @@ class _ServerWrapper:
                 # Get the lock for the specific context, release the overall one
                 await context_locks[key].acquire()
                 context_lock.release()
-                response = await self.server.async_run(Command(cmd=context), add_to_session_cache=False)
-                assert not isinstance(response, LeanError)
-                self.loaded_contexts[key] = LoadedContext(pickle_path=pickle_path, env_id=response.env)
-                # Pickle the specific context, then release
-                response = await self.server.async_run(PickleEnvironment(env=response.env, pickle_to=str(pickle_path)))
-                assert not isinstance(response, LeanError)
-                context_locks[key].release()
+                # Pickle path might still exist, e.g. after a restart
+                if not pickle_path.exists():
+                    response = await self.server.async_run(Command(cmd=context), add_to_session_cache=False)
+                    if isinstance(response, LeanError):
+                        logger.warning("Context Command failed with %s", response.message)
+                        raise HTTPException(status_code=400, detail=f"Command for context failed with {response.message}")
+                    assert not isinstance(response, LeanError)
+                    self.loaded_contexts[key] = LoadedContext(pickle_path=pickle_path, env_id=response.env)
+                    # Pickle the specific context, then release
+                    response = await self.server.async_run(PickleEnvironment(env=response.env, pickle_to=str(pickle_path)))
+                    if isinstance(response, LeanError):
+                        logger.warning("PickleEnvironment failed with %s", response.message)
+                        raise HTTPException(status_code=500, detail=f"PickleEnvironment failed with {response.message}")
+                    context_locks[key].release()
+                else:
+                    context_locks[key].release()
+                    response = await self.server.async_run(
+                        UnpickleEnvironment(unpickle_env_from=str(context_paths[key])))
+                    if isinstance(response, LeanError):
+                        logger.warning("UnpickleEnvironment failed with %s", response.message)
+                        raise HTTPException(status_code=500, detail=f"UnpickleEnvironment failed with {response.message}")
+                    self.loaded_contexts[key] = LoadedContext(pickle_path=context_paths[key], env_id=response.env)
             else:
                 context_lock.release()
                 async with context_locks[key]:
