@@ -139,7 +139,7 @@ def main():
         weight_decay=0.1,
         use_vllm=True,
         num_generations=16,
-        warmup_steps=1000,
+        warmup_steps=5,
         report_to=["wandb"],
         max_completion_length=1024,
         beta=0,
