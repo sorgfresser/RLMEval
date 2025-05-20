@@ -125,6 +125,8 @@ def main():
                 except Exception:
                     logger.exception("Reward thread %s failed", idx)
                     rewards[idx] = 0.0
+        resp = requests.post("http://localhost:8080/reset")
+        resp.raise_for_status()
         return rewards
 
     training_args = GRPOConfig(
@@ -142,7 +144,8 @@ def main():
         max_completion_length=1024,
         beta=0,
         vllm_server_host=args.server_ip,
-        loss_type="dr_grpo"
+        loss_type="dr_grpo",
+        learning_rate=1e-6
     )
 
     trainer = GRPOTrainer(model="Qwen/Qwen2.5-Coder-0.5B-Instruct", args=training_args,

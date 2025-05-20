@@ -39,7 +39,7 @@ REPOS: dict[str, Path] = {
 
 
 def _build_config(repo_root: Path) -> LeanREPLConfig:
-    return LeanREPLConfig(project=LocalProject(str(repo_root), build=False),memory_hard_limit_mb=None)
+    return LeanREPLConfig(project=LocalProject(str(repo_root), build=False), memory_hard_limit_mb=None)
 
 
 class LoadedContext:
@@ -90,14 +90,16 @@ class _ServerWrapper:
                     assert not isinstance(context_response, LeanError)
                     if not context_response.lean_code_is_valid(allow_sorry=True):
                         logger.warning("Context Command has errors! Response: %s", context_response)
-                        raise HTTPException(status_code=400, detail=f"Command for context failed with errors: {context_response.get_errors()}")
+                        raise HTTPException(status_code=400,
+                                            detail=f"Command for context failed with errors: {context_response.get_errors()}")
                     self.loaded_contexts[key] = LoadedContext(pickle_path=pickle_path, env_id=context_response.env)
                     # Pickle the specific context, then release
                     request = PickleEnvironment(env=context_response.env, pickle_to=str(pickle_path))
                     response = await self.server.async_run(request)
                     context_locks[key].release()
                     if isinstance(response, LeanError):
-                        logger.warning("PickleEnvironment failed with %s.\nRequest: %s.\nContext response: %s", response.message, request, context_response)
+                        logger.warning("PickleEnvironment failed with %s.\nRequest: %s.\nContext response: %s",
+                                       response.message, request, context_response)
                         raise HTTPException(status_code=500, detail=f"PickleEnvironment failed with {response.message}")
                 else:
                     context_locks[key].release()
@@ -110,7 +112,7 @@ class _ServerWrapper:
                     self.loaded_contexts[key] = LoadedContext(pickle_path=context_paths[key], env_id=response.env)
             else:
                 context_lock.release()
-                await context_locks[key].acquire() # this is only needed to wait if we're still pickling
+                await context_locks[key].acquire()  # this is only needed to wait if we're still pickling
                 context_locks[key].release()
                 response = await self.server.async_run(
                     UnpickleEnvironment(unpickle_env_from=str(context_paths[key])), verbose=False)
@@ -207,3 +209,12 @@ async def run(project: str, req: RunRequest):
             result = result.model_dump(by_alias=True)
 
     return RunResponse(server_id=sid, result=result)
+
+
+@app.post("/reset")
+async def reset():
+    global _POOLS
+    _POOLS = {
+        name: _ProjectPool(_build_config(path)) for name, path in REPOS.items()
+    }
+    return
