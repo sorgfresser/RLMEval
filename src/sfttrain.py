@@ -191,7 +191,7 @@ def main():
     dataset = dataset.filter(filter_length)
     train_dataset = dataset.filter(split_func)
     test_dataset = dataset.filter(lambda x: not split_func(x))
-    test_dataset = test_dataset.filter(lambda x: filter_length(x, tokenizer.model_max_length / 8))
+    test_dataset = test_dataset.filter(lambda x: filter_length(x, tokenizer.model_max_length // 8))
     training_args = SFTConfig(
         max_length=tokenizer.model_max_length,
         output_dir="./testtrainsft",
