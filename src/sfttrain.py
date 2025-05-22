@@ -182,7 +182,7 @@ def main():
             if not max_preds[idx, b][-1] == tokenizer.eos_token_id:
                 max_preds[idx, b][-1] = tokenizer.eos_token_id
         preds = [string + tokenizer.eos_token for string in tokenizer.decode(max_preds[mask]).split(tokenizer.eos_token)[:-1]]
-        preds = preds if len(labels) <= len(preds) else preds[:len(labels)]
+        preds = preds if len(preds) <= len(labels) else preds[:len(labels)]
         return {"accuracy": acc, "bleu": bleu.compute(predictions=preds, references=labels)["bleu"]}
 
     dataset = dataset.map(to_chat_template, batched=True, batch_size=1000)
