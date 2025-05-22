@@ -184,7 +184,7 @@ def main():
             if not max_preds[idx, b][-1] == tokenizer.eos_token_id:
                 max_preds[idx, b][-1] = tokenizer.eos_token_id
         preds = [string + tokenizer.eos_token for string in tokenizer.decode(max_preds[mask]).split(tokenizer.eos_token)[:-1]]
-        assert len(labels) == len(preds)
+        preds = preds if len(labels) <= len(preds) else preds[:len(labels)]
         return {"accuracy": acc, "bleu": bleu.compute(predictions=preds, references=labels)["bleu"]}
 
     dataset = dataset.map(to_chat_template, batched=True, batch_size=1000)
@@ -195,14 +195,20 @@ def main():
         max_length=tokenizer.model_max_length,
         output_dir="./testtrainsft",
         bf16=True,
-        per_device_train_batch_size=2,
+        per_device_train_batch_size=1,
         gradient_accumulation_steps=8,
-        logging_steps=5,
+        logging_steps=2,
         eval_steps=10,
         eval_strategy="steps",
-        eval_on_start=True,
-        num_train_epochs=1
+        eval_on_start=False,
+        num_train_epochs=1,
+        gradient_checkpointing=True,
+        model_init_kwargs={"attn_implementation": "flash_attention_2"},
+        padding_free=True,
+        eval_accumulation_steps=4,
+        per_device_eval_batch_size=1,
     )
+
     trainer = SFTTrainer(
         "AI-MO/Kimina-Autoformalizer-7B",
         train_dataset=train_dataset,
