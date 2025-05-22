@@ -171,8 +171,8 @@ def main():
             prompts.append(tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True))
         batch["prompt"] = prompts
         return batch
-    def filter_length(elem):
-        if len(tokenizer(elem["prompt"] + elem["completion"]).input_ids) > tokenizer.model_max_length:
+    def filter_length(elem, length: int = tokenizer.model_max_length):
+        if len(tokenizer(elem["prompt"] + elem["completion"]).input_ids) > length:
             return False
         return True
     def compute_metrics(pred: EvalPrediction):
@@ -191,11 +191,13 @@ def main():
     dataset = dataset.filter(filter_length)
     train_dataset = dataset.filter(split_func)
     test_dataset = dataset.filter(lambda x: not split_func(x))
+    test_dataset = test_dataset.filter(lambda x: filter_length(x, tokenizer.model_max_length / 8))
     training_args = SFTConfig(
         max_length=tokenizer.model_max_length,
         output_dir="./testtrainsft",
         bf16=True,
         per_device_train_batch_size=1,
+        per_device_eval_batch_size=1,
         gradient_accumulation_steps=8,
         logging_steps=2,
         eval_steps=10,
@@ -205,8 +207,7 @@ def main():
         gradient_checkpointing=True,
         model_init_kwargs={"attn_implementation": "flash_attention_2"},
         padding_free=True,
-        eval_accumulation_steps=4,
-        per_device_eval_batch_size=1,
+        eval_accumulation_steps=1
     )
 
     trainer = SFTTrainer(

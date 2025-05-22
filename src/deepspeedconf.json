@@ -2,6 +2,9 @@
   "zero_optimization": {
     "stage": 3,
     "stage3_gather_16bit_weights_on_model_save": true,
+    "allgather_bucket_size": 5e8,
+    "reduce_bucket_size": 5e8,
+    "stage3_prefetch_bucket_size": 5e7,
     "offload_param": {
       "device": "cpu",
       "max_in_cpu": 7e11,
