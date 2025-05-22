@@ -1,0 +1,18 @@
+{
+  "zero_optimization": {
+    "stage": 3,
+    "stage3_gather_16bit_weights_on_model_save": true,
+    "offload_param": {
+      "device": "cpu",
+      "max_in_cpu": 1e11
+    },
+    "offload_optimizer": {
+      "device": "cpu"
+    }
+  },
+  "gradient_accumulation_steps": 8,
+  "train_micro_batch_size_per_gpu": 2,
+  "bf16": {
+    "enabled": true
+  }
+}
