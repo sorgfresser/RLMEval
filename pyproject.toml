@@ -28,6 +28,7 @@ dependencies = [
     "vllm>=0.8.5.post1",
     "wandb>=0.19.11",
     "deepspeed>=0.16.7",
+    "evaluate>=0.4.3",
 ]
 
 [build-system]

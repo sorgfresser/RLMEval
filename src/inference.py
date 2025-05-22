@@ -164,7 +164,7 @@ def main():
     import evaluate
     dataset = dataset.rename_columns({"ground_truth": "completion"})
     tokenizer = AutoTokenizer.from_pretrained("AI-MO/Kimina-Autoformalizer-7B")
-    bleu = evaluate.load("bleu")
+
     def to_chat_template(batch):
         prompts = []
         for prompt in batch["prompt"]:
@@ -172,56 +172,24 @@ def main():
         batch["prompt"] = prompts
         return batch
     def filter_length(elem):
-        if len(tokenizer(elem["prompt"] + elem["completion"]).input_ids) > tokenizer.model_max_length:
+        if len(tokenizer(elem["prompt"] + elem["completion"]).input_ids) > tokenizer.model_max_length // 8:
             return False
         return True
-    def compute_metrics(pred: EvalPrediction):
-        max_preds = pred.predictions.argmax(-1)
-        mask = pred.label_ids != -100
-        acc = (pred.label_ids == max_preds)[mask].mean()
-        labels = [string + tokenizer.eos_token for string in tokenizer.decode(pred.label_ids[mask]).split(tokenizer.eos_token)[:-1]]
-        for idx, b in enumerate(mask):
-            if not max_preds[idx, b][-1] == tokenizer.eos_token_id:
-                max_preds[idx, b][-1] = tokenizer.eos_token_id
-        preds = [string + tokenizer.eos_token for string in tokenizer.decode(max_preds[mask]).split(tokenizer.eos_token)[:-1]]
-        assert len(labels) == len(preds)
-        return {"accuracy": acc, "bleu": bleu.compute(predictions=preds, references=labels)["bleu"]}
 
     dataset = dataset.map(to_chat_template, batched=True, batch_size=1000)
     dataset = dataset.filter(filter_length)
     train_dataset = dataset.filter(split_func)
     test_dataset = dataset.filter(lambda x: not split_func(x))
-    training_args = SFTConfig(
-        max_length=tokenizer.model_max_length,
-        output_dir="./testtrainsft",
-        bf16=True,
-        per_device_train_batch_size=2,
-        gradient_accumulation_steps=8,
-        logging_steps=5,
-        eval_steps=10,
-        eval_strategy="steps",
-        eval_on_start=True,
-        num_train_epochs=1
-    )
-    trainer = SFTTrainer(
-        "AI-MO/Kimina-Autoformalizer-7B",
-        train_dataset=train_dataset,
-        eval_dataset=test_dataset,
-        args=training_args,
-        compute_metrics=compute_metrics,
-    )
-    trainer.train()
-    trainer.save_model("./testtrainsft")
-    # model = LLM("AI-MO/Kimina-Autoformalizer-7B")
-    # tokenizer = AutoTokenizer.from_pretrained("AI-MO/Kimina-Autoformalizer-7B")
-    # inp = next(iter(dataset))
 
-    # prompt = inp["prompt"]
-    # text = tokenizer.apply_chat_template(prompt, tokenize=False, add_generation_prompt=True)
-    # sampling_params = SamplingParams(temperature=0.6, top_p=0.95, max_tokens=2048)
-    # output = model.generate(text, sampling_params=sampling_params)
-    # output_text = output[0].outputs[0].text
-    # print(output_text)
+    model = LLM("/workspace/RLMEval/testtrainsft")
+    # tokenizer = AutoTokenizer.from_pretrained("AI-MO/Kimina-Autoformalizer-7B")
+    inp = next(iter(dataset))
+
+    prompt = inp["prompt"]
+    sampling_params = SamplingParams(temperature=0.6, top_p=0.95, max_tokens=8192)
+    output = model.generate(prompt, sampling_params=sampling_params)
+    output_text = output[0].outputs[0].text
+    print(output_text)
 
 if __name__ == "__main__":
     main()
