@@ -148,7 +148,7 @@ def main():
         learning_rate=1e-6
     )
 
-    trainer = GRPOTrainer(model="Qwen/Qwen2.5-Coder-0.5B-Instruct", args=training_args,
+    trainer = GRPOTrainer(model="AI-MO/Kimina-Autoformalizer-7B", args=training_args,
                           reward_funcs=[reward_num_unique_chars], train_dataset=dataset, )
     trainer.train()
 
