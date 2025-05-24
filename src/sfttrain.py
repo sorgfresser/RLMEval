@@ -1,7 +1,3 @@
-from datasets import load_dataset
-from trl import GRPOTrainer, GRPOConfig
-from rlm_eval.metrics.beq_plus import check_theorem_eq_server
-from rlm_eval.data_processing.lean_utils import trim_comments_end
 import argparse
 import requests
 from lean_pool_models import ContextRequest, ContextResponse, RunResponse, RunRequest
@@ -101,6 +97,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--server-ip", type=str, default="localhost")
     args = parser.parse_args()
+    from datasets import load_dataset
+    from rlm_eval.metrics.beq_plus import check_theorem_eq_server
+    from rlm_eval.data_processing.lean_utils import trim_comments_end
 
     dataset = load_dataset("sorgfresser/autoformtest", split="train")
 
@@ -160,7 +159,6 @@ def main():
 
     from transformers import AutoConfig, AutoTokenizer, Qwen2ForCausalLM, EvalPrediction
     from trl import SFTConfig, SFTTrainer
-    from vllm import LLM, SamplingParams
     import evaluate
     dataset = dataset.rename_columns({"ground_truth": "completion"})
     tokenizer = AutoTokenizer.from_pretrained("AI-MO/Kimina-Autoformalizer-7B")
@@ -188,14 +186,13 @@ def main():
         return {"accuracy": acc, "bleu": bleu.compute(predictions=preds, references=labels)["bleu"]}
 
     dataset = dataset.map(to_chat_template, batched=True, batch_size=1000)
-    dataset = dataset.filter(filter_length)
+    dataset = dataset.filter(lambda x: filter_length(x, tokenizer.model_max_length // 64))
     train_dataset = dataset.filter(split_func)
     test_dataset = dataset.filter(lambda x: not split_func(x))
-    test_dataset = test_dataset.filter(lambda x: filter_length(x, tokenizer.model_max_length // 8))
+    test_dataset = test_dataset.filter(lambda x: filter_length(x, tokenizer.model_max_length // 32))
     training_args = SFTConfig(
         max_length=tokenizer.model_max_length,
         output_dir="./testtrainsft",
-        bf16=True,
         per_device_train_batch_size=1,
         per_device_eval_batch_size=1,
         gradient_accumulation_steps=8,
@@ -204,14 +201,12 @@ def main():
         eval_strategy="steps",
         eval_on_start=False,
         num_train_epochs=1,
-        gradient_checkpointing=True,
-        model_init_kwargs={"attn_implementation": "flash_attention_2"},
         padding_free=True,
         eval_accumulation_steps=1
     )
 
     trainer = SFTTrainer(
-        "AI-MO/Kimina-Autoformalizer-7B",
+        "Qwen/Qwen2.5-Coder-0.5B-Instruct",
         train_dataset=train_dataset,
         eval_dataset=test_dataset,
         args=training_args,
@@ -230,5 +225,4 @@ def main():
     # output_text = output[0].outputs[0].text
     # print(output_text)
 
-if __name__ == "__main__":
-    main()
+
