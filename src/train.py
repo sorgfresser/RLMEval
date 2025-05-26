@@ -14,7 +14,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-MAX_WORKERS = int(os.getenv("LEAN_POOL_MAX_WORKERS", 4))
+MAX_WORKERS = int(os.getenv("LEAN_POOL_MAX_WORKERS", 1))
 
 
 def get_beqplus(context: str, ground_truth: str, prediction: str, project: str, is_theorem: bool) -> float:
@@ -83,8 +83,8 @@ def get_beqplus(context: str, ground_truth: str, prediction: str, project: str, 
 
 def make_conversational(batch):
     all_messages = []
-    for name, problem in zip(batch["name"], batch["prompt"], strict=True):
-        prompt = f"Please autoformalize the following problem in Lean 4 with a header. Use the following theorem names: {name}.\n\n"
+    for name, problem, context in zip(batch["name"], batch["prompt"], batch["context"], strict=True):
+        prompt = f"Please autoformalize the following problem in Lean 4 with a header. Here is some context for the problem:\n\n{context}\n\nNow formalize the problem. Use the following theorem names: {name}.\n\n"
         prompt += problem
 
         messages = [
@@ -94,6 +94,12 @@ def make_conversational(batch):
         all_messages.append(messages)
     batch["prompt"] = all_messages
     return batch
+
+
+def split_func(sample, train: bool = True):
+    if train:
+        return sample["project"] != "FLT"
+    return sample["project"] == "FLT"
 
 
 def main():
@@ -106,8 +112,9 @@ def main():
     # Rename informal to prompt, at some point one might want to add context
     dataset = dataset.rename_columns({"informal": "prompt"})
     dataset = dataset.map(make_conversational, batch_size=1000, batched=True)
+    train_dataset = dataset.filter(split_func)
+    test_dataset = dataset.filter(lambda x: not split_func(x))
 
-    # Dummy reward function: count the number of unique characters in the completions
     def reward_num_unique_chars(completions, context, ground_truth, project, is_theorem, **kwargs):
         # If multiple output messages, immediately bs
         rewards = [None if len(c) == 1 else 0.0 for c in completions]
@@ -138,7 +145,7 @@ def main():
         logging_steps=10,
         weight_decay=0.1,
         use_vllm=True,
-        num_generations=16,
+        num_generations=50,
         warmup_steps=5,
         report_to=["wandb"],
         max_completion_length=1024,
@@ -148,8 +155,9 @@ def main():
         learning_rate=1e-6
     )
 
-    trainer = GRPOTrainer(model="AI-MO/Kimina-Autoformalizer-7B", args=training_args,
-                          reward_funcs=[reward_num_unique_chars], train_dataset=dataset, )
+    trainer = GRPOTrainer(model="sorgfresser/testtrainsft", args=training_args,
+                          reward_funcs=[reward_num_unique_chars], train_dataset=train_dataset,
+                          eval_dataset=test_dataset)
     trainer.train()
 
 

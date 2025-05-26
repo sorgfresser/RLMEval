@@ -28,7 +28,7 @@ dependencies = [
     "wandb>=0.19.11",
     "deepspeed>=0.16.7",
     "evaluate>=0.4.3",
-    "torch-xla[tpu]>=2.7.0"
+    "vllm>=0.8.5.post1",
 ]
 
 [build-system]
