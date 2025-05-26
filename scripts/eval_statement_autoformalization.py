@@ -47,15 +47,15 @@ class PromptContext(Enum):
     ZERO_SHOT_FINETUNED = "none"
     ZERO_SHOT_KIMINA = "kimina"
     FILE_CONTEXT_KIMINA = "file_context_kimina"
-data = []
+
 
 class StatementAutoformalizationEvaluation:
     def __init__(
-        self,
-        blueprint_with_lean: list[dict],
-        lean_files: dict,
-        lean_declarations: list[dict],
-        project_dir: str,
+            self,
+            blueprint_with_lean: list[dict],
+            lean_files: dict,
+            lean_declarations: list[dict],
+            project_dir: str,
     ):
         self.blueprint_with_lean = blueprint_with_lean
         self.lean_files = lean_files
@@ -66,21 +66,21 @@ class StatementAutoformalizationEvaluation:
         self.repl_config = LeanREPLConfig(project=LocalProject(project_dir))
 
     def run(
-        self,
-        output_folder: str,
-        model: str,
-        use_chat_prompt: bool = False,
-        api_key: str | None = None,
-        api_base_url: str | None = None,
-        max_total_tokens: int = 4096,
-        max_generated_tokens: int = 512,
-        nb_attempts: int = 1,
-        temperature: float = 1.0,
-        stopwords: list[str] = [],
-        top_p: float = 0.95,
-        verbose: bool = False,
-        n_processes: int | None = 1,
-        prompt_context: PromptContext = PromptContext.FILE_CONTEXT,
+            self,
+            output_folder: str,
+            model: str,
+            use_chat_prompt: bool = False,
+            api_key: str | None = None,
+            api_base_url: str | None = None,
+            max_total_tokens: int = 4096,
+            max_generated_tokens: int = 512,
+            nb_attempts: int = 1,
+            temperature: float = 1.0,
+            stopwords: list[str] = [],
+            top_p: float = 0.95,
+            verbose: bool = False,
+            n_processes: int | None = 1,
+            prompt_context: PromptContext = PromptContext.FILE_CONTEXT,
     ) -> tuple[int, int]:
         # first build the DAG of the blueprint
         blueprint_graph = nx.DiGraph()
@@ -124,24 +124,24 @@ class StatementAutoformalizationEvaluation:
 
         # Function to formalize a single node
         def formalize_node_wrapper(
-            node_label,
-            blueprint_graph=blueprint_graph,
-            lean_files=self.lean_files,
-            lean_declarations=self.lean_declarations,
-            output_folder=output_folder,
-            verbose=verbose,
-            nb_attempts=nb_attempts,
-            temperature=temperature,
-            top_p=top_p,
-            model=model,
-            use_chat_prompt=use_chat_prompt,
-            stopwords=stopwords,
-            api_key=api_key,
-            api_base_url=api_base_url,
-            max_generated_tokens=max_generated_tokens,
-            max_total_tokens=max_total_tokens,
-            prompt_context=prompt_context,
-            console=console,
+                node_label,
+                blueprint_graph=blueprint_graph,
+                lean_files=self.lean_files,
+                lean_declarations=self.lean_declarations,
+                output_folder=output_folder,
+                verbose=verbose,
+                nb_attempts=nb_attempts,
+                temperature=temperature,
+                top_p=top_p,
+                model=model,
+                use_chat_prompt=use_chat_prompt,
+                stopwords=stopwords,
+                api_key=api_key,
+                api_base_url=api_base_url,
+                max_generated_tokens=max_generated_tokens,
+                max_total_tokens=max_total_tokens,
+                prompt_context=prompt_context,
+                console=console,
         ):
             node = blueprint_graph.nodes[node_label]
             try:
@@ -190,7 +190,7 @@ class StatementAutoformalizationEvaluation:
         if verbose:
             console.print(f"Total input tokens: {total_input_tokens}")
             console.print(f"Total output tokens: {total_output_tokens}")
-        return total_input_tokens, total_output_tokens
+
         self._check_predictions(
             blueprint_graph=blueprint_graph,
             predictions_to_check=predictions_to_check,
@@ -203,13 +203,13 @@ class StatementAutoformalizationEvaluation:
         return total_input_tokens, total_output_tokens
 
     def _check_predictions(
-        self,
-        blueprint_graph: nx.DiGraph,
-        predictions_to_check: list[tuple[dict, list[str | None]]],
-        output_folder: str,
-        nb_attempts: int,
-        verbose: bool,
-        nb_processes: int | None = 1,
+            self,
+            blueprint_graph: nx.DiGraph,
+            predictions_to_check: list[tuple[dict, list[str | None]]],
+            output_folder: str,
+            nb_attempts: int,
+            verbose: bool,
+            nb_processes: int | None = 1,
     ) -> None:
         # Prepare arguments for _process_predictions
         args_list = []
@@ -286,7 +286,8 @@ class StatementAutoformalizationEvaluation:
                 )
 
             lean_codes = [result.lean_code for result in validity_results if result.lean_code is not None]
-            well_typed_lean_codes: list[str] = [result.lean_code for result in validity_results if result.well_typed]  # type: ignore
+            well_typed_lean_codes: list[str] = [result.lean_code for result in validity_results if
+                                                result.well_typed]  # type: ignore
             assert all(code is not None for code in well_typed_lean_codes)
 
             selected_lean_codes = {}
@@ -405,10 +406,10 @@ class StatementAutoformalizationEvaluation:
             table.add_column("Percentage", style="green")
             for key in totals:
                 total = (
-                    total_nodes
-                    if key in ["Well-typed", "Replace-compiles", "System errors", "Empty predictions"]
-                    else total_thm_nodes
-                ) * nb_attempts
+                            total_nodes
+                            if key in ["Well-typed", "Replace-compiles", "System errors", "Empty predictions"]
+                            else total_thm_nodes
+                        ) * nb_attempts
                 count = totals[key]
                 percentage = (count / total) if total > 0 else 0
                 table.add_row(key, f"{count}/{total}", f"{percentage:.2%}")
@@ -442,24 +443,24 @@ def _node_informal_comment(node: dict[str, str], lean_name: str) -> str:
 
 
 def _formalize_node(
-    node: dict,
-    blueprint_graph: nx.DiGraph,
-    lean_files: dict,
-    lean_declarations: list[dict],
-    output_folder: str,
-    verbose: bool,
-    nb_attempts: int,
-    temperature: float,
-    top_p: float,
-    model: str,
-    use_chat_prompt: bool,
-    stopwords: list[str],
-    api_key: str | None,
-    api_base_url: str | None,
-    max_total_tokens: int,
-    max_generated_tokens: int,
-    prompt_context: PromptContext,
-    console=console,
+        node: dict,
+        blueprint_graph: nx.DiGraph,
+        lean_files: dict,
+        lean_declarations: list[dict],
+        output_folder: str,
+        verbose: bool,
+        nb_attempts: int,
+        temperature: float,
+        top_p: float,
+        model: str,
+        use_chat_prompt: bool,
+        stopwords: list[str],
+        api_key: str | None,
+        api_base_url: str | None,
+        max_total_tokens: int,
+        max_generated_tokens: int,
+        prompt_context: PromptContext,
+        console=console,
 ) -> tuple[list[str | None], int, int]:
     # prepare prompt context
     lean_declaration = node["lean_declarations"][0]
@@ -473,8 +474,6 @@ def _formalize_node(
             new_theorem_name=lean_declaration["name"],
             add_sorry=True,
         )
-    data.append((node["processed_text"], original_lean_context, decl_ground_truth, lean_declaration["name"], is_thm, list(lean_files.keys())[0].split("/")[0].strip().removesuffix(".lean")))
-    return [], 0, 0
 
     def compress_lean_context(lean_context: str, level: int = 0) -> str:
         if level == -1:
@@ -485,7 +484,7 @@ def _formalize_node(
         if level >= 2:
             # remove lines in the middle of the context
             lines = lean_context.split("\n")
-            keep_lines = len(lines) // (2**level)
+            keep_lines = len(lines) // (2 ** level)
             if keep_lines == 0:
                 return ""
             lines = lines[:keep_lines] + ["... [TRUNCATED] ..."] + lines[-keep_lines:]
@@ -627,7 +626,7 @@ def _formalize_node(
 
             # dump the messages to a file
             with open(
-                os.path.join(output_folder, f"input_messages_compress_{compress_level}.json"), "w"
+                    os.path.join(output_folder, f"input_messages_compress_{compress_level}.json"), "w"
             ) as inputs_file:
                 inputs_file.write(json.dumps(messages, indent=4, ensure_ascii=False))
 
@@ -649,7 +648,8 @@ def _formalize_node(
                 return [None for _ in range(nb_attempts)], 0, 0
 
             predictions = [
-                choice.message.content if choice.message.content and choice.message.content.strip() else None  # type: ignore
+                choice.message.content if choice.message.content and choice.message.content.strip() else None
+                # type: ignore
                 for choice in completion_response.choices  # type: ignore
             ]
             predictions = [
@@ -679,9 +679,9 @@ def _formalize_node(
                         lean_context = compress_lean_context(lean_context, level=level)
                         lean_context += "\n\n" + _node_informal_comment(node, lean_declaration["name"])
                         return (
-                            "Translate the last problem in comment into Lean4 code (only the core declaration).\n```lean4\n"
-                            + lean_context.strip()
-                            + prefix_decl
+                                "Translate the last problem in comment into Lean4 code (only the core declaration).\n```lean4\n"
+                                + lean_context.strip()
+                                + prefix_decl
                         ).strip()
 
                     # we assume files are less than 2^16=65536 lines of code, beyond that it is probably useless to try to compress it
@@ -846,7 +846,7 @@ def _process_predictions(args: ProcessPredictionsInput) -> tuple[str, str, list[
     dedup_predictions = Counter(args.predictions)
 
     with jsonlines.open(
-        os.path.join(args.output_folder, "postprocessed_dedup_predictions.jsonl"), "w"
+            os.path.join(args.output_folder, "postprocessed_dedup_predictions.jsonl"), "w"
     ) as prediction_file:
         prediction_file.write_all({"prediction": prediction} for prediction in dedup_predictions)
 
@@ -988,8 +988,3 @@ if __name__ == "__main__":
             n_processes=n_processes,
             prompt_context=prompt_context,
         )
-    from datasets import Dataset
-    data = [{"name": x[3], "ground_truth": x[2], "context": x[1], "informal": x[0], "is_theorem": x[4], "project": x[5]} for x in data]
-    ds = Dataset.from_list(data)
-    ds.save_to_disk("./rlm25")
-    ds.push_to_hub("autoformtest", private=True)
