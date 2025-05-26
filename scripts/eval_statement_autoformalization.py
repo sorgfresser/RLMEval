@@ -473,7 +473,7 @@ def _formalize_node(
             new_theorem_name=lean_declaration["name"],
             add_sorry=True,
         )
-    data.append((node["processed_text"], original_lean_context, decl_ground_truth, lean_declaration["name"]))
+    data.append((node["processed_text"], original_lean_context, decl_ground_truth, lean_declaration["name"], is_thm, list(lean_files.keys())[0].split("/")[0].strip().removesuffix(".lean")))
     return [], 0, 0
 
     def compress_lean_context(lean_context: str, level: int = 0) -> str:
@@ -989,7 +989,7 @@ if __name__ == "__main__":
             prompt_context=prompt_context,
         )
     from datasets import Dataset
-    data = [{"name": x[3], "ground_truth": x[2], "context": x[1], "informal": x[0]} for x in data]
+    data = [{"name": x[3], "ground_truth": x[2], "context": x[1], "informal": x[0], "is_theorem": x[4], "project": x[5]} for x in data]
     ds = Dataset.from_list(data)
     ds.save_to_disk("./rlm25")
     ds.push_to_hub("autoformtest", private=True)
