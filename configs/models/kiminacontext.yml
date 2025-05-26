@@ -10,6 +10,6 @@ stopwords:
   - ":= by"
   - "sorry"
 n_processes: 15
-prompt_context: "ZERO_SHOT_KIMINA"
+prompt_context: "FILE_CONTEXT_KIMINA"
 api_key: abc-123
 api_base_url: http://localhost:8000/v1
