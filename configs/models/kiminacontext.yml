@@ -1,0 +1,15 @@
+model: "hosted_vllm/sorgfresser/testtrainsft"
+temperature: 0.7
+top_p: 0.95
+nb_samples: 50
+max_total_tokens: 4096
+max_generated_tokens: 512
+use_chat_prompt: true
+stopwords:
+  - "```\n"
+  - ":= by"
+  - "sorry"
+n_processes: 15
+prompt_context: "ZERO_SHOT_KIMINA"
+api_key: abc-123
+api_base_url: http://localhost:8000/v1

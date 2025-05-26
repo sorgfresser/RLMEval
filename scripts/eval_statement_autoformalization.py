@@ -46,6 +46,7 @@ class PromptContext(Enum):
     FILE_CONTEXT = "file_context"
     ZERO_SHOT_FINETUNED = "none"
     ZERO_SHOT_KIMINA = "kimina"
+    FILE_CONTEXT_KIMINA = "file_context_kimina"
 data = []
 
 class StatementAutoformalizationEvaluation:
@@ -581,6 +582,48 @@ def _formalize_node(
                             {"role": "user", "content": prompt}
                         ]
                     )
+
+                case PromptContext.FILE_CONTEXT_KIMINA:
+                    def instantiate_prompt(lean_context: str, level: int = 0) -> str:
+                        lean_context = compress_lean_context(lean_context, level=level)
+                        prompt = f"Please autoformalize the following problem in Lean 4 with a header. Here is some context for the problem:\n\n{lean_context}\n\nNow formalize the problem. Use the following theorem names: my_favorite_theorem.\n\n"
+                        prompt += f"\n{_node_informal_text(node)}"
+                        return prompt
+
+                        # we assume files are less than 2^16=65536 lines of code, beyond that it is probably useless to try
+
+                    messages = None
+                    compress_level = 0
+                    for compress_level in range(16):
+                        messages = clean_messages(
+                            [
+                                {"role": "system", "content": "You are an expert in mathematics and Lean 4."},
+                                {
+                                    "role": "user",
+                                    "content": instantiate_prompt(original_lean_context, level=compress_level),
+                                }
+                            ]
+                        )
+                        if token_counter(model=model, messages=messages) <= max_input_tokens:
+                            break
+                        else:
+                            messages = None
+                    if not messages:
+                        compress_level = -1
+                        messages = clean_messages(
+                            [
+                                {"role": "system", "content": "You are an expert in mathematics and Lean 4."},
+                                {
+                                    "role": "user",
+                                    "content": instantiate_prompt(original_lean_context, level=compress_level),
+                                }
+                            ]
+                        )
+                        if token_counter(model=model, messages=messages) > max_input_tokens:
+                            logger.warning(
+                                f"Natural language context too large for node {node['label']}. Skipping formalization."
+                            )
+                            return [None for _ in range(nb_attempts)], 0, 0
 
             # dump the messages to a file
             with open(
