@@ -21,7 +21,7 @@ from lean_interact.interface import (
 )
 import logging
 
-from lean_pool_models import RunResponse, RunRequest, ContextRequest, ContextResponse
+from lean_pool_models import RunResponse, RunRequest
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,7 @@ REPOS: dict[str, Path] = {
         __file__).parent.parent / 'traced_repos/PrimeNumberTheoremAnd_6101a4b1f0cd4096b0c41cc90c7ba89f7593ef77/PrimeNumberTheoremAnd',
 }
 
+RETRIES = 10
 
 def _build_config(repo_root: Path) -> LeanREPLConfig:
     return LeanREPLConfig(project=LocalProject(str(repo_root), build=False), memory_hard_limit_mb=None)
@@ -55,6 +56,21 @@ class _ServerWrapper:
         self.server = AutoLeanServer(cfg)
         self.lock = asyncio.Lock()
         self.loaded_contexts: dict[str, LoadedContext] = {}
+
+    async def restart(self):
+        async with self.lock:
+            self.server.restart()
+            new_contexts = {}
+            for key, context in self.loaded_contexts.items():
+                response = await self.server.async_run(
+                    UnpickleEnvironment(unpickle_env_from=str(context.pickle_path)))
+                if isinstance(response, LeanError):
+                    logger.warning("UnpickleEnvironment failed with %s", response.message)
+                    raise HTTPException(status_code=500,
+                                        detail=f"UnpickleEnvironment failed with {response.message}")
+                new_contexts[key] = LoadedContext(pickle_path=context.pickle_path, env_id=response.env)
+            self.loaded_contexts = new_contexts
+
 
     async def get_env(self, context: str, context_lock: asyncio.Lock, context_paths: dict[str, Path],
                       context_locks: dict[str, asyncio.Lock]) -> LoadedContext:
@@ -161,7 +177,16 @@ class _ProjectPool:
             self, ctx: str, wrapper: _ServerWrapper
     ) -> int:
         """Returns an env_id that is present in the server"""
-        return (await wrapper.get_env(ctx, self._context_lock, self._context_cache, self._context_locks)).env_id
+        env_id = None
+        for _ in range(RETRIES):
+            try:
+                env_id = (await wrapper.get_env(ctx, self._context_lock, self._context_cache, self._context_locks)).env_id
+                break
+            except (TimeoutError, ConnectionAbortedError):
+                await wrapper.restart()
+        if env_id is None:
+            raise RuntimeError("Could not get env!")
+        return env_id
 
 
 _POOLS: dict[str, _ProjectPool] = {
@@ -169,26 +194,6 @@ _POOLS: dict[str, _ProjectPool] = {
 }
 
 app = FastAPI(title="Lean-Interact Pool API")
-
-
-@app.post(
-    "/{project}/context",
-    response_model=ContextResponse,
-    summary="Compile a context and get back (server_id, env_id)"
-)
-async def load_context(project: str, req: ContextRequest):
-    pool = _POOLS.get(project)
-    if pool is None:
-        raise HTTPException(404, f"Unknown project {project!r}")
-    if not req.context:
-        raise HTTPException(400, "No context provided")
-
-    sid, wrapper = await pool.acquire_server(req.server_id)
-
-    env_id = await pool.get_or_create_env(req.context, wrapper)
-
-    return ContextResponse(server_id=sid, env_id=env_id)
-
 
 @app.post(
     "/{project}/run",
@@ -200,14 +205,32 @@ async def run(project: str, req: RunRequest):
     if pool is None:
         raise HTTPException(404, f"Unknown project {project!r}")
 
-    sid, wrapper = await pool.acquire_server(req.server_id)
+    sid, wrapper = await pool.acquire_server(None)
+    env_id = None
+    if req.context is not None:
+        if not req.context:
+            raise HTTPException(400, "Empty context provided, pass None or a string!")
+        env_id = await pool.get_or_create_env(req.context, wrapper)
+    data = req.data
+    if isinstance(data, Command):
+        data = data.model_copy(deep=True, update={"env": env_id})
 
-    async with wrapper.lock:
-        result = await wrapper.server.async_run(req.data, timeout=300, verbose=False)
-        # Ensure JSON-serialisable
-        if hasattr(result, "model_dump"):
-            result = result.model_dump(by_alias=True)
-
+    result = None
+    for _ in range(2):
+        try:
+            async with wrapper.lock:
+                result = await wrapper.server.async_run(data, timeout=20, verbose=False)
+        except (TimeoutError, ConnectionAbortedError) as e:
+            logger.warning(e)
+            await wrapper.restart()
+            env_id = await pool.get_or_create_env(req.context, wrapper)
+            if isinstance(data, Command):
+                data = data.model_copy(deep=True, update={"env": env_id})
+    if result is None:
+        raise HTTPException(400, "Data did not return valid result!")
+    # Ensure JSON-serialisable
+    if hasattr(result, "model_dump"):
+        result = result.model_dump(by_alias=True)
     return RunResponse(server_id=sid, result=result)
 
 
