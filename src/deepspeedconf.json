@@ -15,8 +15,8 @@
       "pin_memory": true
     }
   },
-  "gradient_accumulation_steps": 8,
-  "train_micro_batch_size_per_gpu": 1,
+  "gradient_accumulation_steps": 16,
+  "train_micro_batch_size_per_gpu": 8,
   "bf16": {
     "enabled": true
   },

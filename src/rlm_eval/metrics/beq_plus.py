@@ -17,6 +17,7 @@ from lean_pool_models import RunRequest, RunResponse
 import requests
 from pydantic import ValidationError
 
+UVICORN_PORT = 8020
 
 @dataclass
 class BEqCPUResult:
@@ -161,7 +162,7 @@ def check_theorem_equivalence(
 
 
 def check_theorem_eq_server(
-        theorem1: str, theorem2: str, context_env: int, server_id: int, project: str
+        theorem1: str, theorem2: str, context: str, project: str
 ) -> BEqCPUResult:
     base_thm_name = "base_theorem"
     reformulated_thm_name = "reformulated_theorem"
@@ -191,9 +192,14 @@ def check_theorem_eq_server(
 
             try:
                 req = RunRequest(
-                    data=Command(cmd=formal_code + indent_code(prepended_proof + proof, 2), env=context_env),
-                    server_id=server_id)
-                resp = requests.post(f"http://localhost:8080/{project}/run", data=req.model_dump_json())
+                    data=Command(cmd=formal_code + indent_code(prepended_proof + proof, 2)), context=context)
+                resp = None
+                for i in range(3):
+                    try:
+                        resp = requests.post(f"http://localhost:{UVICORN_PORT}/{project}/run", data=req.model_dump_json(), timeout=120)
+                    except requests.exceptions.Timeout:
+                        if i == 2:
+                            raise
                 response = RunResponse.model_validate(resp.json())
                 try:
                     lean_output = CommandResponse.model_validate(response.result)
@@ -239,8 +245,14 @@ def check_theorem_eq_server(
         # drawback of `have` strategy: variable names/types must match exactly
         provable_without_have = False
         try:
-            req = RunRequest(data=Command(cmd=formal_2_code + proof_all_have, env=context_env), server_id=server_id)
-            resp = requests.post(f"http://localhost:8080/{project}/run", data=req.model_dump_json())
+            req = RunRequest(data=Command(cmd=formal_2_code + proof_all_have), context=context)
+            resp = None
+            for i in range(3):
+                try:
+                    resp = requests.post(f"http://localhost:{UVICORN_PORT}/{project}/run", data=req.model_dump_json(), timeout=120)
+                except requests.exceptions.Timeout:
+                    if i == 2:
+                        raise
             result = RunResponse.model_validate(resp.json())
             try:
                 res_without_have = CommandResponse.model_validate(result.result)

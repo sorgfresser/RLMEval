@@ -1,21 +1,24 @@
 from datasets import load_dataset
 from trl import GRPOTrainer, GRPOConfig
-from rlm_eval.metrics.beq_plus import check_theorem_eq_server
+from rlm_eval.metrics.beq_plus import check_theorem_eq_server, UVICORN_PORT
 from rlm_eval.data_processing.lean_utils import trim_comments_end
 import argparse
 import requests
-from lean_pool_models import ContextRequest, ContextResponse, RunResponse, RunRequest
+from lean_pool_models import RunResponse, RunRequest
 from lean_interact import Command
 from lean_interact.interface import CommandResponse, LeanError
 from pydantic import ValidationError
 import concurrent.futures
 import logging
 import os
+from transformers import AutoTokenizer
+from time import sleep
+import psutil
 
 logger = logging.getLogger(__name__)
 
-MAX_WORKERS = int(os.getenv("LEAN_POOL_MAX_WORKERS", 1))
-
+MAX_WORKERS = int(os.getenv("LEAN_POOL_MAX_WORKERS", 16))
+MODEL_NAME="sorgfresser/testtrainsft"
 
 def get_beqplus(context: str, ground_truth: str, prediction: str, project: str, is_theorem: bool) -> float:
     # check if the last line ends with " in" and remove " in" if it does
@@ -32,13 +35,15 @@ def get_beqplus(context: str, ground_truth: str, prediction: str, project: str, 
     if not lean_context.strip():
         lean_context = "-- context stub"
 
-    req = ContextRequest(context=lean_context)
-    resp = requests.post(f"http://localhost:8080/{project}/context", data=req.model_dump_json())
-    response = ContextResponse.model_validate(resp.json())
-    env = response.env_id
-    server_id = response.server_id
-    req = RunRequest(data=Command(cmd=ground_truth, env=env), server_id=server_id)
-    resp = requests.post(f"http://localhost:8080/{project}/run", data=req.model_dump_json())
+    req = RunRequest(data=Command(cmd=ground_truth), context=lean_context)
+    resp = None
+    for i in range(3):
+        try:
+            resp = requests.post(f"http://localhost:{UVICORN_PORT}/{project}/run", data=req.model_dump_json(), timeout=120)
+        except requests.exceptions.Timeout:
+             if i == 2:
+                 raise
+
     ground_truth_response = RunResponse.model_validate(resp.json())
     # Check ground truth is valid
     try:
@@ -50,8 +55,14 @@ def get_beqplus(context: str, ground_truth: str, prediction: str, project: str, 
     if not prediction:
         well_typed, beq_result = False, None
     else:
-        req = RunRequest(data=Command(cmd=prediction, env=env), server_id=server_id)
-        resp = requests.post(f"http://localhost:8080/{project}/run", data=req.model_dump_json())
+        req = RunRequest(data=Command(cmd=prediction), context=lean_context)
+        for i in range(3):
+            try:
+                resp = requests.post(f"http://localhost:{UVICORN_PORT}/{project}/run", data=req.model_dump_json(), timeout=120)
+            except requests.exceptions.Timeout:
+                if i == 2:
+                    raise
+
         prediction_response = RunResponse.model_validate(resp.json())
         try:
             prediction_data = CommandResponse.model_validate(prediction_response.result)
@@ -66,8 +77,7 @@ def get_beqplus(context: str, ground_truth: str, prediction: str, project: str, 
                 beq_result = check_theorem_eq_server(
                     theorem1=prediction,
                     theorem2=ground_truth,
-                    context_env=env,
-                    server_id=server_id,
+                    context=context,
                     project=project,
                 )
 
@@ -108,10 +118,17 @@ def main():
     args = parser.parse_args()
 
     dataset = load_dataset("sorgfresser/autoformtest", split="train")
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+
+    def filter_length(elem, length: int = tokenizer.model_max_length):
+        if len(tokenizer(tokenizer.apply_chat_template(elem["prompt"], tokenize=False, add_generation_prompt=True)).input_ids) > length:
+            return False
+        return True
 
     # Rename informal to prompt, at some point one might want to add context
     dataset = dataset.rename_columns({"informal": "prompt"})
     dataset = dataset.map(make_conversational, batch_size=1000, batched=True)
+    dataset = dataset.filter(lambda x : filter_length(x, length=tokenizer.model_max_length - 1024))
     train_dataset = dataset.filter(split_func)
     test_dataset = dataset.filter(lambda x: not split_func(x))
 
@@ -125,15 +142,23 @@ def main():
         with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
             futures = {pool.submit(get_beqplus, con, g, c, p, t): idx for idx, (con, g, c, p, t) in
                        enumerate(zip(context, ground_truth, completion_strings, project, is_theorem, strict=True))}
+            failures = 0
             for fut in concurrent.futures.as_completed(futures):
                 idx = futures[fut]
                 try:
                     rewards[idx] = fut.result()
                 except Exception:
-                    logger.exception("Reward thread %s failed", idx)
+                    logger.info("Reward thread %s failed", idx)
+                    failures += 1
                     rewards[idx] = 0.0
-        resp = requests.post("http://localhost:8080/reset")
-        resp.raise_for_status()
+            logger.info("%s of %s threads failed", failures, len(futures))
+            if failures > len(futures) // 5:
+                logger.warning("More than a fifth of all reward threads failed!")
+        # Only reset on master and only once everything is processed, if too high memory usage
+        if training_args.process_index == 0 and psutil.virtual_memory().percent > 45:
+            sleep(30)
+            resp = requests.post(f"http://localhost:{UVICORN_PORT}/reset")
+            resp.raise_for_status()
         return rewards
 
     training_args = GRPOConfig(
@@ -142,17 +167,20 @@ def main():
         gradient_accumulation_steps=16,
         bf16=True,
         gradient_checkpointing=True,
-        logging_steps=10,
+        logging_steps=3,
         weight_decay=0.1,
         use_vllm=True,
-        num_generations=50,
+        num_generations=48,
         warmup_steps=5,
         report_to=["wandb"],
         max_completion_length=1024,
         beta=0,
         vllm_server_host=args.server_ip,
         loss_type="dr_grpo",
-        learning_rate=1e-6
+        learning_rate=1e-6,
+        eval_strategy="steps",
+        eval_steps=50,
+        per_device_eval_batch_size=16
     )
 
     trainer = GRPOTrainer(model="sorgfresser/testtrainsft", args=training_args,
