@@ -26,16 +26,19 @@ from lean_pool_models import RunResponse, RunRequest
 
 logger = logging.getLogger(__name__)
 
+BASE_PATH = os.environ.get("RLM_BASE_PATH", None)
+if BASE_PATH is None:
+    BASE_PATH = Path(__file__).parent.parent
+else:
+    BASE_PATH = Path(BASE_PATH)
+
 REPOS: dict[str, Path] = {
-    "PFR": Path(__file__).parent.parent / 'traced_repos/pfr_f6bdcac2365623d3667d3ff8fd8ddb7f95ce2313/pfr',
-    "FLT3": Path(__file__).parent.parent / 'traced_repos/FLT3_a199fa0467f86504a9d2f6164b0456608e586821/FLT3',
-    "Carleson": Path(
-        __file__).parent.parent / 'traced_repos/carleson_ec175b9008144d009269ce427b9ad43dbd70d0a5/carleson',
-    "FLT": Path(__file__).parent.parent / 'traced_repos/FLT_fed5e57b05e232f3bfe24d24098111e9dcd7bcd1/FLT',
-    "TestingLowerBounds": Path(
-        __file__).parent.parent / 'traced_repos/testing-lower-bounds_0f09ff100a06a5e4542181514bfff74213ae126b/testing-lower-bounds',
-    "PrimeNumberTheoremAnd": Path(
-        __file__).parent.parent / 'traced_repos/PrimeNumberTheoremAnd_6101a4b1f0cd4096b0c41cc90c7ba89f7593ef77/PrimeNumberTheoremAnd',
+    "PFR": BASE_PATH / 'traced_repos/pfr_f6bdcac2365623d3667d3ff8fd8ddb7f95ce2313/pfr',
+    "FLT3": BASE_PATH / 'traced_repos/FLT3_a199fa0467f86504a9d2f6164b0456608e586821/FLT3',
+    "Carleson": BASE_PATH / 'traced_repos/carleson_ec175b9008144d009269ce427b9ad43dbd70d0a5/carleson',
+    "FLT": BASE_PATH / 'traced_repos/FLT_fed5e57b05e232f3bfe24d24098111e9dcd7bcd1/FLT',
+    "TestingLowerBounds": BASE_PATH / 'traced_repos/testing-lower-bounds_0f09ff100a06a5e4542181514bfff74213ae126b/testing-lower-bounds',
+    "PrimeNumberTheoremAnd": BASE_PATH / 'traced_repos/PrimeNumberTheoremAnd_6101a4b1f0cd4096b0c41cc90c7ba89f7593ef77/PrimeNumberTheoremAnd',
 }
 
 RETRIES = 10
