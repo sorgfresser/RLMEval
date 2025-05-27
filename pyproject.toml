@@ -28,12 +28,19 @@ dependencies = [
     "wandb>=0.19.11",
     "deepspeed>=0.16.7",
     "evaluate>=0.4.3",
-    "vllm>=0.8.5.post1",
+    "vllm>=0.7.3",
+    "torch>=2.5.1"
 ]
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
+optimum-tpu = { path = "../optimum-tpu" }
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
 
 [build-system]
 requires      = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
-
-[tool.uv.sources]
-optimum-tpu = { path = "../optimum-tpu" }
