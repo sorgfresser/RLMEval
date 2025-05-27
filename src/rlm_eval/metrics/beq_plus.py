@@ -18,7 +18,7 @@ import requests
 from pydantic import ValidationError
 
 UVICORN_PORT = 8020
-TIMEOUT = 60
+TIMEOUT = 90
 
 def try_repeatedly(req: RunRequest, project: str, allow_error: bool = False, retry_count: int = 2) -> RunResponse:
     response = None
