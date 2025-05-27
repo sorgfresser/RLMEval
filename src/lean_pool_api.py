@@ -265,7 +265,7 @@ async def run(project: str, req: RunRequest):
         result = None
         for _ in range(2):
             try:
-                result = await wrapper.server.async_run(data, timeout=20, verbose=False)
+                result = await wrapper.server.async_run(data, timeout=30, verbose=False)
             except (TimeoutError, ConnectionAbortedError) as e:
                 logger.warning(e)
                 await wrapper.restart()
