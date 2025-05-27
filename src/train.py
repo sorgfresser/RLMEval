@@ -15,7 +15,7 @@ from transformers import AutoTokenizer
 
 logger = logging.getLogger(__name__)
 
-MAX_WORKERS = int(os.getenv("LEAN_POOL_MAX_WORKERS", 28))
+MAX_WORKERS = int(os.getenv("LEAN_POOL_MAX_WORKERS", 26))
 MODEL_NAME="sorgfresser/testtrainsft"
 
 
@@ -161,17 +161,18 @@ def main():
         loss_type="dr_grpo",
         learning_rate=1e-6,
         eval_strategy="steps",
-        eval_steps=50,
+        eval_steps=51,
         per_device_eval_batch_size=16,
         save_strategy="steps",
         save_steps=25,
         push_to_hub=True,
+        lr_scheduler_type="constant_with_warmup"
     )
 
     trainer = GRPOTrainer(model="sorgfresser/testtrainsft", args=training_args,
                           reward_funcs=[reward_num_unique_chars], train_dataset=train_dataset,
                           eval_dataset=test_dataset)
-    trainer.train(resume_from_checkpoint=True)
+    trainer.train()
 
 
 if __name__ == "__main__":
