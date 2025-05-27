@@ -1,10 +1,10 @@
 from datasets import load_dataset
 from trl import GRPOTrainer, GRPOConfig
-from rlm_eval.metrics.beq_plus import check_theorem_eq_server, UVICORN_PORT
+from rlm_eval.metrics.beq_plus import check_theorem_eq_server, UVICORN_PORT, try_repeatedly
 from rlm_eval.data_processing.lean_utils import trim_comments_end
 import argparse
 import requests
-from lean_pool_models import RunResponse, RunRequest
+from lean_pool_models import RunRequest
 from lean_interact import Command
 from lean_interact.interface import CommandResponse, LeanError
 from pydantic import ValidationError
@@ -12,13 +12,12 @@ import concurrent.futures
 import logging
 import os
 from transformers import AutoTokenizer
-from time import sleep
-import psutil
 
 logger = logging.getLogger(__name__)
 
-MAX_WORKERS = int(os.getenv("LEAN_POOL_MAX_WORKERS", 16))
+MAX_WORKERS = int(os.getenv("LEAN_POOL_MAX_WORKERS", 28))
 MODEL_NAME="sorgfresser/testtrainsft"
+
 
 def get_beqplus(context: str, ground_truth: str, prediction: str, project: str, is_theorem: bool) -> float:
     # check if the last line ends with " in" and remove " in" if it does
@@ -36,19 +35,9 @@ def get_beqplus(context: str, ground_truth: str, prediction: str, project: str, 
         lean_context = "-- context stub"
 
     req = RunRequest(data=Command(cmd=ground_truth), context=lean_context)
-    resp = None
-    for i in range(3):
-        try:
-            resp = requests.post(f"http://localhost:{UVICORN_PORT}/{project}/run", data=req.model_dump_json(), timeout=120)
-        except requests.exceptions.Timeout:
-             if i == 2:
-                 raise
-
-    ground_truth_response = RunResponse.model_validate(resp.json())
-    # Check ground truth is valid
     try:
-        CommandResponse.model_validate(ground_truth_response.result)
-    except ValidationError:
+        try_repeatedly(req, project)
+    except (ValidationError, RuntimeError):
         logger.exception("Failed to validate ground-truth!")
         raise
 
@@ -56,14 +45,7 @@ def get_beqplus(context: str, ground_truth: str, prediction: str, project: str, 
         well_typed, beq_result = False, None
     else:
         req = RunRequest(data=Command(cmd=prediction), context=lean_context)
-        for i in range(3):
-            try:
-                resp = requests.post(f"http://localhost:{UVICORN_PORT}/{project}/run", data=req.model_dump_json(), timeout=120)
-            except requests.exceptions.Timeout:
-                if i == 2:
-                    raise
-
-        prediction_response = RunResponse.model_validate(resp.json())
+        prediction_response = try_repeatedly(req, project, allow_error=True)
         try:
             prediction_data = CommandResponse.model_validate(prediction_response.result)
         except ValidationError:
@@ -151,12 +133,12 @@ def main():
                     logger.info("Reward thread %s failed", idx)
                     failures += 1
                     rewards[idx] = 0.0
-            logger.info("%s of %s threads failed", failures, len(futures))
+            logger.warning("%s of %s threads failed", failures, len(futures))
             if failures > len(futures) // 5:
-                logger.warning("More than a fifth of all reward threads failed!")
-        # Only reset on master and only once everything is processed, if too high memory usage
-        if training_args.process_index == 0 and psutil.virtual_memory().percent > 45:
-            sleep(30)
+                logger.error("More than a fifth of all reward threads failed!")
+        # Only reset on master and only once everything is processed
+        trainer.accelerator.wait_for_everyone() # sync them, cause master might otherwise reset too early
+        if training_args.process_index == 0:
             resp = requests.post(f"http://localhost:{UVICORN_PORT}/reset")
             resp.raise_for_status()
         return rewards
@@ -180,13 +162,16 @@ def main():
         learning_rate=1e-6,
         eval_strategy="steps",
         eval_steps=50,
-        per_device_eval_batch_size=16
+        per_device_eval_batch_size=16,
+        save_strategy="steps",
+        save_steps=25,
+        push_to_hub=True,
     )
 
     trainer = GRPOTrainer(model="sorgfresser/testtrainsft", args=training_args,
                           reward_funcs=[reward_num_unique_chars], train_dataset=train_dataset,
                           eval_dataset=test_dataset)
-    trainer.train()
+    trainer.train(resume_from_checkpoint=True)
 
 
 if __name__ == "__main__":

@@ -18,6 +18,37 @@ import requests
 from pydantic import ValidationError
 
 UVICORN_PORT = 8020
+TIMEOUT = 45
+
+def try_repeatedly(req: RunRequest, project: str, allow_error: bool = False, retry_count: int = 2) -> RunResponse:
+    response = None
+    for j in range(retry_count):
+        resp = None
+        for i in range(retry_count):
+            try:
+                resp = requests.post(f"http://localhost:{UVICORN_PORT}/{project}/run", data=req.model_dump_json(), timeout=TIMEOUT)
+                break
+            except requests.exceptions.Timeout:
+                pass
+        if resp is None:
+            raise RuntimeError("Repeatedly timed out!")
+        response = RunResponse.model_validate(resp.json())
+        # Check whether is valid
+        try:
+            CommandResponse.model_validate(response.result)
+        except ValidationError:
+            if allow_error:
+                try:
+                    LeanError.model_validate(response.result)
+                except ValidationError:
+                    response = None
+            else:
+                response = None
+        if response:
+            break
+    if response is None:
+        raise RuntimeError("Parsing failed!")
+    return response
 
 @dataclass
 class BEqCPUResult:
@@ -193,14 +224,7 @@ def check_theorem_eq_server(
             try:
                 req = RunRequest(
                     data=Command(cmd=formal_code + indent_code(prepended_proof + proof, 2)), context=context)
-                resp = None
-                for i in range(3):
-                    try:
-                        resp = requests.post(f"http://localhost:{UVICORN_PORT}/{project}/run", data=req.model_dump_json(), timeout=120)
-                    except requests.exceptions.Timeout:
-                        if i == 2:
-                            raise
-                response = RunResponse.model_validate(resp.json())
+                response = try_repeatedly(req, project, True)
                 try:
                     lean_output = CommandResponse.model_validate(response.result)
                 except ValidationError:
@@ -246,14 +270,7 @@ def check_theorem_eq_server(
         provable_without_have = False
         try:
             req = RunRequest(data=Command(cmd=formal_2_code + proof_all_have), context=context)
-            resp = None
-            for i in range(3):
-                try:
-                    resp = requests.post(f"http://localhost:{UVICORN_PORT}/{project}/run", data=req.model_dump_json(), timeout=120)
-                except requests.exceptions.Timeout:
-                    if i == 2:
-                        raise
-            result = RunResponse.model_validate(resp.json())
+            result = try_repeatedly(req, project, True)
             try:
                 res_without_have = CommandResponse.model_validate(result.result)
             except ValidationError:
