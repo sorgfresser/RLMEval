@@ -31,6 +31,7 @@ dependencies = [
     "vllm>=0.7.3",
     "torch>=2.5.1",
     "flagembedding>=1.3.5",
+    "transformers<=4.51.3"
 ]
 
 [tool.uv.sources]
