@@ -14,6 +14,9 @@ import os
 from transformers import AutoTokenizer
 from FlagEmbedding import BGEM3FlagModel
 import torch
+import numpy
+
+torch.serialization.add_safe_globals([numpy.core.multiarray._reconstruct, numpy.ndarray, numpy.dtype, numpy.dtypes.UInt32DType])
 
 logger = logging.getLogger(__name__)
 
