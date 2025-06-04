@@ -16,14 +16,16 @@ from FlagEmbedding import BGEM3FlagModel
 import torch
 import numpy
 
-torch.serialization.add_safe_globals([numpy.core.multiarray._reconstruct, numpy.ndarray, numpy.dtype, numpy.dtypes.UInt32DType])
+torch.serialization.add_safe_globals(
+    [numpy.core.multiarray._reconstruct, numpy.ndarray, numpy.dtype, numpy.dtypes.UInt32DType])
 
 logger = logging.getLogger(__name__)
 
 MAX_WORKERS = int(os.getenv("LEAN_POOL_MAX_WORKERS", 1))
 model_path = "purewhite42/dependency_retriever_f"
 model = BGEM3FlagModel(model_path, use_fp16=True, devices=["cpu"])
-batch_size=64
+batch_size = 64
+
 
 def format_doc_only_f(decl: str) -> str:
     return f'''Formal Declaration: {decl[:1536]}'''
@@ -50,7 +52,8 @@ def get_embedding_sim(completions: list[list[dict[str, str]]], informal: list[st
     return diagonals.tolist()
 
 
-def get_beqplus(context: str, ground_truth: str, prediction: str, project: str, is_theorem: bool, beqplus: bool = True) -> float:
+def get_beqplus(context: str, ground_truth: str, prediction: str, project: str, is_theorem: bool,
+                beqplus: bool = True) -> float:
     # check if the last line ends with " in" and remove " in" if it does
     trimmed_context = trim_comments_end(context).rstrip()
     if "\n" in trimmed_context:
@@ -140,13 +143,14 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(args.model_name)
 
     def filter_length(elem, length: int = tokenizer.model_max_length):
-        if len(tokenizer(tokenizer.apply_chat_template(elem["prompt"], tokenize=False, add_generation_prompt=True)).input_ids) > length:
+        if len(tokenizer(tokenizer.apply_chat_template(elem["prompt"], tokenize=False,
+                                                       add_generation_prompt=True)).input_ids) > length:
             return False
         return True
 
     # Rename informal to prompt, at some point one might want to add context
     dataset = dataset.map(make_conversational, batch_size=1000, batched=True)
-    dataset = dataset.filter(lambda x : filter_length(x, length=tokenizer.model_max_length - 1024))
+    dataset = dataset.filter(lambda x: filter_length(x, length=tokenizer.model_max_length - 1024))
     train_dataset = dataset.filter(split_func)
     test_dataset = dataset.filter(lambda x: not split_func(x))
 
@@ -169,12 +173,12 @@ def main():
                 except Exception:
                     logger.info("Reward thread %s failed", idx)
                     failures += 1
-                    rewards[idx] = 0.0
+                    rewards[idx] = None  # failed, so cannot use this reward
             logger.warning("%s of %s threads failed", failures, len(futures))
             if failures > len(futures) // 5:
                 logger.error("More than a fifth of all reward threads failed!")
         # Only reset on master and only once everything is processed
-        trainer.accelerator.wait_for_everyone() # sync them, cause master might otherwise reset too early
+        trainer.accelerator.wait_for_everyone()  # sync them, cause master might otherwise reset too early
         if training_args.process_index == 0:
             resp = requests.post(f"http://localhost:{UVICORN_PORT}/reset")
             resp.raise_for_status()
