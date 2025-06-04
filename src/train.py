@@ -134,6 +134,7 @@ def main():
     parser.add_argument("output_dir", type=str)
     parser.add_argument("--server-ip", type=str, default="localhost")
     parser.add_argument("--beta", type=float, default=0.0)
+    parser.add_argument("--lean-weight", type=float, default=1.0, help="Weight for the Lean BEQ+ reward. Only useful if --embedding-sim is set, otherwise simply a multiplier for the BEQ+ reward.")
     parser.add_argument("--embedding-sim", action="store_true", default=False)
     parser.add_argument("--no-beq", action="store_true", default=False)
     parser.add_argument("--resume", action="store_true", default=False)
@@ -207,7 +208,8 @@ def main():
         save_strategy="steps",
         save_steps=25,
         push_to_hub=True,
-        lr_scheduler_type="constant_with_warmup"
+        lr_scheduler_type="constant_with_warmup",
+        reward_weights=[args.lean_weight, 1.0] if args.embedding_sim else [args.lean_weight],
     )
     reward_funcs = [reward_num_unique_chars]
     if args.embedding_sim:
