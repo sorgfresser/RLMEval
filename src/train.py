@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 MAX_WORKERS = int(os.getenv("LEAN_POOL_MAX_WORKERS", 1))
 model_path = "purewhite42/dependency_retriever_f"
-model = BGEM3FlagModel(model_path, use_fp16=True, devices=["cpu"])
+model = BGEM3FlagModel(model_path, use_fp16=True)
 batch_size = 64
 
 
